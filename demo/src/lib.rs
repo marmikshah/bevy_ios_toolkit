@@ -53,46 +53,49 @@ pub fn run() {
             product_ids: vec![REMOVE_ADS.into()],
         })
         .insert_resource(AdmobConfig::test_ads())
+        .init_resource::<PendingShow>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (on_button_press, restyle_buttons, update_status))
+        .add_systems(
+            Update,
+            (
+                on_button_press,
+                drive_pending,
+                restyle_buttons,
+                update_status,
+            ),
+        )
         .run();
 }
 
-/// What each button does when tapped.
+/// One button per feature. Full-screen ads load *and* present from a single tap.
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 enum Action {
     Purchase,
-    Restore,
-    LoadInterstitial,
-    ShowInterstitial,
-    LoadRewarded,
-    ShowRewarded,
+    Interstitial,
+    Rewarded,
     ToggleBanner,
+    Consent,
+    Tracking,
     Haptic,
-    RequestAtt,
     Review,
-    AuthGameCenter,
-    SubmitScore,
-    ShowGameCenter,
-    RequestConsent,
+    GameCenter,
 }
 
 const ROWS: &[(&str, Action)] = &[
     ("Buy: Remove Ads", Action::Purchase),
-    ("Restore Purchases", Action::Restore),
-    ("Load Interstitial", Action::LoadInterstitial),
-    ("Show Interstitial", Action::ShowInterstitial),
-    ("Load Rewarded", Action::LoadRewarded),
-    ("Show Rewarded", Action::ShowRewarded),
+    ("Interstitial Ad", Action::Interstitial),
+    ("Rewarded Ad", Action::Rewarded),
     ("Toggle Banner", Action::ToggleBanner),
+    ("Request Ad Consent", Action::Consent),
+    ("Request Tracking (ATT)", Action::Tracking),
     ("Haptic Tap", Action::Haptic),
-    ("Request Tracking (ATT)", Action::RequestAtt),
     ("Ask for Review", Action::Review),
-    ("Game Center: Sign In", Action::AuthGameCenter),
-    ("Submit Score 4200", Action::SubmitScore),
-    ("Show Game Center", Action::ShowGameCenter),
-    ("Request Ad Consent", Action::RequestConsent),
+    ("Game Center", Action::GameCenter),
 ];
+
+/// Full-screen ads a tap asked for; presented by `drive_pending` once loaded.
+#[derive(Resource, Default)]
+struct PendingShow(std::collections::HashSet<AdFormat>);
 
 #[derive(Component)]
 struct StatusLine;
@@ -171,9 +174,11 @@ fn restyle_buttons(
 #[allow(clippy::too_many_arguments)]
 fn on_button_press(
     buttons: Query<(&Interaction, &Action), Changed<Interaction>>,
-    state: Res<AdmobState>,
+    admob: Res<AdmobState>,
+    inventory: Res<AdInventory>,
+    gc: Res<GameCenter>,
+    mut pending: ResMut<PendingShow>,
     mut purchase: MessageWriter<PurchaseRequest>,
-    mut restore: MessageWriter<RestoreRequest>,
     mut load: MessageWriter<LoadAd>,
     mut show: MessageWriter<ShowAd>,
     mut show_banner: MessageWriter<ShowBanner>,
@@ -193,58 +198,91 @@ fn on_button_press(
             Action::Purchase => {
                 purchase.write(PurchaseRequest(REMOVE_ADS.into()));
             }
-            Action::Restore => {
-                restore.write(RestoreRequest);
-            }
-            Action::LoadInterstitial => {
-                load.write(LoadAd(AdFormat::Interstitial));
-            }
-            Action::ShowInterstitial => {
-                show.write(ShowAd(AdFormat::Interstitial));
-            }
-            Action::LoadRewarded => {
-                load.write(LoadAd(AdFormat::Rewarded));
-            }
-            Action::ShowRewarded => {
-                show.write(ShowAd(AdFormat::Rewarded));
-            }
+            Action::Interstitial => queue_ad(
+                AdFormat::Interstitial,
+                &inventory,
+                &mut pending,
+                &mut load,
+                &mut show,
+            ),
+            Action::Rewarded => queue_ad(
+                AdFormat::Rewarded,
+                &inventory,
+                &mut pending,
+                &mut load,
+                &mut show,
+            ),
             Action::ToggleBanner => {
-                if state.banner_visible {
+                if admob.banner_visible {
                     hide_banner.write(HideBanner);
                 } else {
                     show_banner.write(ShowBanner::default());
                 }
             }
+            Action::Consent => {
+                consent.write(RequestConsent);
+            }
+            Action::Tracking => {
+                att.write(RequestTracking);
+            }
             Action::Haptic => {
                 platform::haptics::play(Haptic::Medium);
-            }
-            Action::RequestAtt => {
-                att.write(RequestTracking);
             }
             Action::Review => {
                 review::request();
             }
-            Action::AuthGameCenter => {
-                auth.write(AuthenticateGameCenter);
-            }
-            Action::SubmitScore => {
-                submit.write(SubmitScore {
-                    leaderboard_id: LEADERBOARD.into(),
-                    score: 4200,
-                });
-                achievement.write(ReportAchievement {
-                    achievement_id: ACHIEVEMENT.into(),
-                    percent: 100.0,
-                });
-            }
-            Action::ShowGameCenter => {
-                dashboard.write(ShowGameCenter);
-            }
-            Action::RequestConsent => {
-                consent.write(RequestConsent);
+            // First tap signs in; once authenticated, a tap submits a score +
+            // achievement and opens the dashboard — the whole feature in one button.
+            Action::GameCenter => {
+                if gc.is_authenticated() {
+                    submit.write(SubmitScore {
+                        leaderboard_id: LEADERBOARD.into(),
+                        score: 4200,
+                    });
+                    achievement.write(ReportAchievement {
+                        achievement_id: ACHIEVEMENT.into(),
+                        percent: 100.0,
+                    });
+                    dashboard.write(ShowGameCenter);
+                } else {
+                    auth.write(AuthenticateGameCenter);
+                }
             }
         }
     }
+}
+
+/// One tap = load *and* present: show now if it's ready, otherwise load and let
+/// [`drive_pending`] present it the moment it finishes loading.
+fn queue_ad(
+    format: AdFormat,
+    inventory: &AdInventory,
+    pending: &mut PendingShow,
+    load: &mut MessageWriter<LoadAd>,
+    show: &mut MessageWriter<ShowAd>,
+) {
+    if inventory.is_loaded(format) {
+        show.write(ShowAd(format));
+    } else {
+        load.write(LoadAd(format));
+        pending.0.insert(format);
+    }
+}
+
+/// Present each tap-queued ad as soon as its load finishes (or drop it on failure).
+fn drive_pending(
+    mut pending: ResMut<PendingShow>,
+    inventory: Res<AdInventory>,
+    mut show: MessageWriter<ShowAd>,
+) {
+    pending.0.retain(|&format| match inventory.state(format) {
+        AdLoadState::Loaded => {
+            show.write(ShowAd(format));
+            false
+        }
+        AdLoadState::Failed => false,
+        _ => true,
+    });
 }
 
 /// Reflect live state from the toolkit's resources into the status line.
