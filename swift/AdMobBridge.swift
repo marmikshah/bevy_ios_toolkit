@@ -31,7 +31,7 @@
 import Foundation
 import os
 
-private enum AdFormat: Int32 {
+enum AdFormat: Int32 {
     case banner = 0
     case interstitial = 1
     case rewarded = 2
@@ -75,7 +75,10 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
         if !error.isEmpty { ev["error"] = error }
         if rewardAmount != 0 { ev["reward_amount"] = rewardAmount }
         if !rewardType.isEmpty { ev["reward_type"] = rewardType }
-        shared_.withLock { $0.events.append(ev) }
+        // Bind to a `let` so the lock closure captures an immutable value
+        // (capturing the `var` is an error under the Swift 6 language mode).
+        let event = ev
+        shared_.withLock { $0.events.append(event) }
     }
 
     private func setConsentStatus(_ value: Int32) {
@@ -114,8 +117,8 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     @MainActor
     private func refreshConsentInfo(present: Bool) {
         #if canImport(UserMessagingPlatform)
-        let params = RequestParameters()
-        ConsentInformation.shared.requestConsentInfoUpdate(with: params) { [weak self] error in
+        let params = UMPRequestParameters()
+        UMPConsentInformation.sharedInstance.requestConsentInfoUpdate(with: params) { [weak self] error in
             guard let self else { return }
             if let error {
                 NSLog("[admob] consent info update failed: %@", String(describing: error))
@@ -123,7 +126,7 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
             Task { @MainActor in
                 self.cacheConsentStatus()
                 if present, let vc = self.rootViewController() {
-                    ConsentForm.loadAndPresentIfRequired(from: vc) { [weak self] _ in
+                    UMPConsentForm.loadAndPresentIfRequired(from: vc) { [weak self] _ in
                         Task { @MainActor in self?.cacheConsentStatus() }
                     }
                 }
@@ -138,7 +141,7 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     private func cacheConsentStatus() {
         #if canImport(UserMessagingPlatform)
         let value: Int32
-        switch ConsentInformation.shared.consentStatus {
+        switch UMPConsentInformation.sharedInstance.consentStatus {
         case .required: value = 1
         case .notRequired: value = 2
         case .obtained: value = 3

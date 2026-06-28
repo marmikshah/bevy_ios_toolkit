@@ -30,7 +30,7 @@ simulator: xcodeproj ## Build + install + launch on a booted iOS Simulator
 		build
 	xcrun simctl install booted \
 		ios/build/Build/Products/Debug-iphonesimulator/IosToolkitDemo.app
-	xcrun simctl launch booted com.example.iostoolkitdemo
+	xcrun simctl launch booted com.marmikshah.playground
 
 clean: ## Remove cargo + iOS build artifacts
 	cargo clean

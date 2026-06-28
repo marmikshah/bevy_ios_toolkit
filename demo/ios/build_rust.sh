@@ -6,6 +6,11 @@ set -euo pipefail
 # Xcode strips PATH; make cargo + the linker tools reachable.
 export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
+# Build the staticlib for the same minimum iOS as the app (Xcode sets this in a
+# build phase; default to the project's floor otherwise). Without it rustc uses
+# the SDK's newer minimum and the linker warns the object is "built for newer iOS".
+export IPHONEOS_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-16.0}"
+
 # The demo crate root is the parent of this ios/ directory.
 DEMO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$DEMO"

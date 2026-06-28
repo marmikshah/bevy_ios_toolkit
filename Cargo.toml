@@ -13,7 +13,7 @@ exclude = ["demo"]
 
 [dependencies]
 # Minimal: the bridge is pure data + ECS plumbing, no render/UI surface.
-bevy = { version = "0.18.1", default-features = false }
+bevy = { version = "0.19", default-features = false }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
 
