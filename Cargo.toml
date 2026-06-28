@@ -1,6 +1,6 @@
 [package]
 name = "bevy_ios_toolkit"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Native iOS integrations for Bevy as ECS resources and messages: StoreKit IAP, Google AdMob ads, App Tracking Transparency, Game Center, review prompts, haptics and safe-area — each behind a feature, over a polled C-ABI Swift bridge with a testable desktop fake."
