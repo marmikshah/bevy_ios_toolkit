@@ -1,0 +1,20 @@
+[package]
+name = "bevy_ios_toolkit_demo"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT OR Apache-2.0"
+description = "Button-per-feature demo app for bevy_ios_toolkit — runs on desktop (fakes) and iOS (real bridges)."
+
+# Library so the iOS shell can link it as a staticlib and call `main_rs`; the
+# desktop binary (src/main.rs) just calls `run()`.
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[[bin]]
+name = "demo"
+path = "src/main.rs"
+
+[dependencies]
+bevy = "0.18"
+bevy_ios_toolkit = { path = "..", features = ["all"] }

@@ -1,0 +1,113 @@
+# bevy_ios_toolkit
+
+Native iOS integrations for [Bevy](https://bevyengine.org), exposed as ordinary
+ECS resources and messages. One crate, one plugin, a **feature per integration**:
+
+| feature | module | what it bridges |
+|---------|--------|-----------------|
+| `storekit` | `store` | StoreKit 2 in-app purchases |
+| `ads` | `ads` | Google AdMob ads + UMP (GDPR) consent |
+| `att` | `att` | App Tracking Transparency prompt |
+| `gamekit` | `gamekit` | Game Center auth, leaderboards, achievements |
+| `review` | `review` | StoreKit review prompt |
+| `platform` | `platform` | impact haptics, safe-area inset, outbound links |
+
+> **Status: experimental (0.1, pre-release).** APIs will move. Live behaviour
+> needs a real device, the relevant Apple/Google setup, and the matching Swift
+> shim in your Xcode target — see "iOS integration". Everything is fully
+> exercisable on desktop first via the built-in fakes.
+
+## How it works
+
+Every module shares one native contract (the proven `NativeBridge.swift` pattern):
+
+- Each native entry point is `@_cdecl` C-ABI, called **from Rust**.
+- The SDKs' async, delegate-driven work surfaces as **polled state** (or a
+  drained event queue) read once per frame — *never* callbacks into Rust,
+  because re-entrancy against winit's event loop is not safe.
+- Each Swift shim (`swift/*.swift`) sits behind `#if canImport(...)` with linking
+  stubs, so the staticlib links on any target.
+
+Off iOS every module is a **stateful, env-tunable fake**, so the whole app flow —
+purchases, ads, rewards, consent, ATT, Game Center — runs on `cargo run` desktop
+builds with no device.
+
+## Features are opt-in for a reason
+
+No feature is enabled by default. A module's `extern "C"` block only exists when
+its feature is on, and the matching Swift shim must be in your Xcode target — so
+enabling a feature you haven't wired natively fails loudly at link time instead
+of misbehaving at runtime.
+
+```toml
+bevy_ios_toolkit = { version = "0.1", features = ["storekit", "ads", "att"] }
+```
+
+## Quick start
+
+```rust
+use bevy::prelude::*;
+use bevy_ios_toolkit::prelude::*;
+
+fn main() {
+    App::new()
+        .add_plugins((DefaultPlugins, IosPlugin))
+        .insert_resource(AdmobConfig::test_ads())          // `ads`
+        .insert_resource(StoreConfig {                     // `storekit`
+            product_ids: vec!["com.example.app.removeads".into()],
+        })
+        .run();
+}
+
+// Show an interstitial once it's loaded.
+fn show(inv: Res<AdInventory>, mut shows: MessageWriter<ShowAd>) {
+    if inv.is_loaded(AdFormat::Interstitial) {
+        shows.write(ShowAd(AdFormat::Interstitial));
+    }
+}
+
+// Gate features on ownership (covers purchase, restore, relaunch).
+fn gate(entitlements: Res<Entitlements>) {
+    if entitlements.owns("com.example.app.removeads") { /* hide ads */ }
+}
+```
+
+See [`demo/`](demo/) for a button-per-feature app that runs on desktop and iOS.
+
+## iOS integration
+
+1. Add this crate with the features you ship.
+2. Copy the matching `swift/*.swift` shims into your app and add them to the
+   Xcode target. The symbol prefixes (`cupertino_`, `admob_`, `att_`,
+   `gamekit_`, `review_`) won't collide with your own bridge.
+3. Per-feature native setup:
+   - **ads** — add the GoogleMobileAds + UserMessagingPlatform SPM packages; set
+     `GADApplicationIdentifier` in `Info.plist` (use `TEST_APP_ID` in dev).
+   - **att** — add `NSUserTrackingUsageDescription` to `Info.plist`.
+   - **gamekit** — enable the Game Center capability.
+   - **storekit** — define products in App Store Connect (or a StoreKit config).
+4. The `demo/ios/` XcodeGen project shows the whole wiring end to end.
+
+## Testing
+
+```bash
+cargo test --features all
+cargo run --example store --features storekit
+cargo run --example ads   --features ads
+```
+
+The fakes are env-tunable (force no-fill, show-failures, consent prompts, ATT
+outcomes, Game Center sign-out) — each module documents its knobs. On-device
+behaviour must be validated in Xcode with the SDKs linked; this crate can't
+simulate Apple's or Google's servers.
+
+## Compatibility
+
+| `bevy_ios_toolkit` | `bevy` | iOS | AdMob SDK |
+|--------------------|--------|-----|-----------|
+| 0.1                | 0.18   | 16+ | 12.x (+ UMP 2.x) |
+
+## License
+
+Licensed under either of [Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT) at
+your option.

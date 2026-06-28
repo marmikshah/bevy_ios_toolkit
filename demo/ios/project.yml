@@ -1,0 +1,114 @@
+name: IosToolkitDemo
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    # The Rust toolchain links the standard C++ library; allow it.
+    ENABLE_BITCODE: NO
+    # The pre-build script runs cargo + stages the lib into the source tree, so
+    # it cannot run inside Xcode's user-script sandbox.
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: YES
+    # Let the static lib's missing-symbol-at-scan resolve via frameworks, and
+    # keep the Swift @_cdecl + ObjC categories from being dead-stripped.
+    OTHER_LDFLAGS:
+      - -lc++
+      - -ObjC
+
+# The AdMob SDK and the UMP consent SDK are resolved by Xcode via SPM. Both are
+# the modern, no-prefix API (GoogleMobileAds 12.x / UserMessagingPlatform 2.x).
+packages:
+  GoogleMobileAds:
+    url: https://github.com/googleads/swift-package-manager-google-mobile-ads
+    from: "12.0.0"
+  GoogleUserMessagingPlatform:
+    url: https://github.com/googleads/swift-package-manager-google-user-messaging-platform
+    from: "2.0.0"
+
+targets:
+  IosToolkitDemo:
+    type: application
+    platform: iOS
+    sources:
+      - path: main.m
+      # The six bevy_ios_toolkit Swift shims, vendored from ../../swift/.
+      # Each is behind `#if canImport(...)` so it links even if a framework is
+      # absent; together they cover every feature the demo's buttons drive.
+      - path: StoreKitBridge.swift
+      - path: AdMobBridge.swift
+      - path: AppTrackingBridge.swift
+      - path: GameKitBridge.swift
+      - path: ReviewBridge.swift
+      - path: CupertinoPlatform.swift
+      # Apple privacy manifest (advertising identifier + required-reason APIs).
+      - path: PrivacyInfo.xcprivacy
+    entitlements:
+      path: IosToolkitDemo.entitlements
+      properties:
+        # Game Center capability — required for GameKit auth / leaderboards.
+        com.apple.developer.game-center: true
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: iOS Toolkit Demo
+        CFBundleName: IosToolkitDemo
+        LSApplicationCategoryType: public.app-category.developer-tools
+        ITSAppUsesNonExemptEncryption: false
+        # AdMob: the official iOS TEST app id. Replace with your real app id for
+        # release (and never ship test ad units). Without this key the Mobile
+        # Ads SDK crashes on start.
+        GADApplicationIdentifier: ca-app-pub-3940256099942544~1458002511
+        # ATT prompt copy. Required whenever the app links AppTrackingTransparency.
+        NSUserTrackingUsageDescription: This identifier will be used to deliver personalized ads to you.
+        # SKAdNetwork attribution. Google publishes the full list; their primary
+        # network id is included here — add the rest from Google's docs for
+        # production attribution coverage.
+        SKAdNetworkItems:
+          - SKAdNetworkIdentifier: cstr6suwn9.skadnetwork
+        UILaunchScreen: {}
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIRequiredDeviceCapabilities:
+          - arm64
+          - metal
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.iostoolkitdemo
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: 1
+        CODE_SIGN_STYLE: Automatic
+        # Set your Apple Developer Team ID here (or pass DEVELOPMENT_TEAM= to
+        # xcodebuild). StoreKit / Game Center / ads all need a real signed app.
+        DEVELOPMENT_TEAM: ""
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        LIBRARY_SEARCH_PATHS:
+          - $(inherited)
+          - $(PROJECT_DIR)/rustlib/$(PLATFORM_NAME)
+        OTHER_LDFLAGS:
+          - $(inherited)
+          - -lbevy_ios_toolkit_demo
+    dependencies:
+      - package: GoogleMobileAds
+        product: GoogleMobileAds
+      - package: GoogleUserMessagingPlatform
+        product: UserMessagingPlatform
+      - sdk: Metal.framework
+      - sdk: QuartzCore.framework
+      - sdk: UIKit.framework
+      - sdk: Foundation.framework
+      - sdk: CoreGraphics.framework
+      - sdk: Security.framework
+      - sdk: StoreKit.framework
+      - sdk: GameKit.framework
+      - sdk: AppTrackingTransparency.framework
+      - sdk: AdSupport.framework
+    preBuildScripts:
+      - script: bash "$PROJECT_DIR/build_rust.sh"
+        name: Build Rust static library
+        basedOnDependencyAnalysis: false

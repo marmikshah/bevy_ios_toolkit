@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Game Center capability for GameKit authentication, leaderboards, and
+	     achievements. XcodeGen also writes this from project.yml's entitlements
+	     block; the file is kept in source so signing is reproducible. -->
+	<key>com.apple.developer.game-center</key>
+	<true/>
+</dict>
+</plist>
