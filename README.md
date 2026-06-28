@@ -105,7 +105,15 @@ simulate Apple's or Google's servers.
 
 | `bevy_ios_toolkit` | `bevy` | iOS | AdMob SDK |
 |--------------------|--------|-----|-----------|
-| 0.1                | 0.18   | 16+ | 12.x (+ UMP 2.x) |
+| 0.1                | 0.19   | 16+ | 12.x (+ UMP 2.x) |
+
+## Authorship
+
+Much of this project — the Rust crate, the Swift bridges, its tests, and these
+docs — was written by **Claude Opus 4.8** (Anthropic) under human direction and
+review. It ships with a passing test suite and a runnable demo, but it's young
+(0.x): read the code, run your own tests, and validate the native iOS paths on a
+real device before relying on it in production. Bug reports and PRs welcome.
 
 ## License
 
