@@ -16,5 +16,5 @@ name = "demo"
 path = "src/main.rs"
 
 [dependencies]
-bevy = "0.18"
+bevy = "0.19"
 bevy_ios_toolkit = { path = "..", features = ["all"] }

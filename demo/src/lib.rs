@@ -100,7 +100,7 @@ fn setup(mut commands: Commands) {
                 StatusLine,
                 Text::new("ready"),
                 TextFont {
-                    font_size: 16.0,
+                    font_size: FontSize::Px(16.0),
                     ..default()
                 },
                 TextColor(Color::srgb(0.8, 0.9, 1.0)),
@@ -126,7 +126,7 @@ fn setup(mut commands: Commands) {
                     b.spawn((
                         Text::new(*label),
                         TextFont {
-                            font_size: 18.0,
+                            font_size: FontSize::Px(18.0),
                             ..default()
                         },
                         TextColor(Color::WHITE),
