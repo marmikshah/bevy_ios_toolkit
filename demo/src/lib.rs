@@ -13,7 +13,7 @@
 use bevy::prelude::*;
 use bevy_ios_toolkit::prelude::*;
 
-const REMOVE_ADS: &str = "com.example.iostoolkitdemo.removeads";
+const REMOVE_ADS: &str = "iap.playground.removeads";
 const LEADERBOARD: &str = "lb.demo.highscore";
 const ACHIEVEMENT: &str = "ach.demo.first_tap";
 
