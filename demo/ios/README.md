@@ -3,6 +3,14 @@
 The native wrapper that turns the `bevy_ios_toolkit_demo` Rust staticlib into a
 real iOS app, so each toolkit feature can be tried on a device or simulator.
 
+> **⚠️ Set your Team ID first — the build fails without it.** `DEVELOPMENT_TEAM`
+> in `project.yml` is empty by default. Until you set it to your Apple Developer
+> Team ID, Xcode fails with a code-signing error (e.g. *"Signing for
+> 'IosToolkitDemo' requires a development team"*) — including for the Simulator,
+> because the Game Center entitlement forces signing. Set it in `project.yml`
+> (then re-run `make xcodeproj`) or pass `DEVELOPMENT_TEAM=XXXXXXXXXX` to
+> `xcodebuild`.
+
 ## Layout
 
 | file | role |
