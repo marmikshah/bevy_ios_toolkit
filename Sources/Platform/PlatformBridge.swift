@@ -3,7 +3,7 @@
 // Same contract as StoreKitBridge.swift: @_cdecl C-ABI called FROM Rust, polled
 // getters (no callbacks into Rust). Everything that needs UIKit sits behind
 // #if canImport(UIKit) with linking stubs otherwise, so the staticlib links on
-// any target. Symbol prefix `cupertino_`.
+// any target. Symbol prefix `platform_`.
 //
 // Shipped as this package's `Platform` product; link it from your app target.
 
@@ -11,7 +11,7 @@ import Foundation
 
 // Tiny lock-wrapped int — Foundation has no public atomic Int; uncontended
 // (one writer per value) — the same atomic discipline the other shims use.
-final class CupertinoAtomicInt {
+final class AtomicInt {
     private let lock = NSLock()
     private var raw: Int
     init(_ v: Int) { raw = v }
@@ -30,8 +30,8 @@ import UIKit
 /// 0 light, 1 medium, 2 heavy, 3 rigid (sharp tick).
 @MainActor private var hapticGenerators: [UIImpactFeedbackGenerator] = []
 
-@_cdecl("cupertino_haptic")
-public func cupertino_haptic(_ kind: Int32) {
+@_cdecl("platform_haptic")
+public func platform_haptic(_ kind: Int32) {
     DispatchQueue.main.async {
         if hapticGenerators.isEmpty {
             let styles: [UIImpactFeedbackGenerator.FeedbackStyle] = [.light, .medium, .heavy, .rigid]
@@ -50,10 +50,10 @@ public func cupertino_haptic(_ kind: Int32) {
 /// Top safe-area inset in points, cached so Rust can poll it synchronously from
 /// any thread. The first call may return 0; callers re-ask after the window
 /// exists.
-private let safeTopCache = CupertinoAtomicInt(0)
+private let safeTopCache = AtomicInt(0)
 
-@_cdecl("cupertino_safe_top")
-public func cupertino_safe_top() -> Float {
+@_cdecl("platform_safe_top")
+public func platform_safe_top() -> Float {
     DispatchQueue.main.async {
         let inset = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
@@ -66,8 +66,8 @@ public func cupertino_safe_top() -> Float {
 
 // MARK: - Outbound links
 
-@_cdecl("cupertino_open_url")
-public func cupertino_open_url(_ url: UnsafePointer<CChar>) {
+@_cdecl("platform_open_url")
+public func platform_open_url(_ url: UnsafePointer<CChar>) {
     let s = String(cString: url)
     DispatchQueue.main.async {
         guard let u = URL(string: s) else { return }
@@ -78,8 +78,8 @@ public func cupertino_open_url(_ url: UnsafePointer<CChar>) {
 #else
 // UIKit unavailable: linking stubs.
 
-@_cdecl("cupertino_haptic") public func cupertino_haptic(_ kind: Int32) {}
-@_cdecl("cupertino_safe_top") public func cupertino_safe_top() -> Float { 0 }
-@_cdecl("cupertino_open_url") public func cupertino_open_url(_ url: UnsafePointer<CChar>) {}
+@_cdecl("platform_haptic") public func platform_haptic(_ kind: Int32) {}
+@_cdecl("platform_safe_top") public func platform_safe_top() -> Float { 0 }
+@_cdecl("platform_open_url") public func platform_open_url(_ url: UnsafePointer<CChar>) {}
 
 #endif

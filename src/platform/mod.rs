@@ -1,6 +1,6 @@
 //! Apple-platform niceties: impact [`haptics`], the top [`safe_area`] inset, and
 //! opening outbound [`links`]. Thin, fire-and-forget wrappers over
-//! `swift/CupertinoPlatform.swift`; no-ops off iOS (links shell out to `open` on
+//! `Sources/Platform/PlatformBridge.swift`; no-ops off iOS (links shell out to `open` on
 //! macOS so the flow is debuggable on desktop).
 //!
 //! These are plain functions — call them from any system. There's no plugin and

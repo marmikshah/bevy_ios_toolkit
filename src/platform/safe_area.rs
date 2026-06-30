@@ -8,9 +8,9 @@
 #[cfg(target_os = "ios")]
 pub fn top() -> f32 {
     unsafe extern "C" {
-        fn cupertino_safe_top() -> f32;
+        fn platform_safe_top() -> f32;
     }
-    unsafe { cupertino_safe_top() }
+    unsafe { platform_safe_top() }
 }
 
 #[cfg(not(target_os = "ios"))]
