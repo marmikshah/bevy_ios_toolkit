@@ -1,11 +1,11 @@
-// Google AdMob bridge for bevy_google_admob.
+// Google AdMob bridge for bevy_ios_toolkit.
 //
-// Design contract with the Rust side (bevy_google_admob::ads):
+// Design contract with the Rust side (the bevy_ios_toolkit ads module):
 //   - Every entry point is @_cdecl C-ABI, called FROM Rust.
 //   - AdMob's async, delegate-driven work runs in Tasks on the main actor;
 //     results surface as a POLLED EVENT QUEUE drained once per frame, never as
 //     callbacks into Rust — re-entrancy against winit's event loop is not safe.
-//     This mirrors the NativeBridge.swift / StoreKitBridge.swift pattern.
+//     This mirrors the StoreKitBridge.swift pattern.
 //   - admob_drain_events returns a pointer to a buffer owned here, valid only
 //     until the next drain; Rust copies immediately.
 //   - This file must COMPILE AND LINK even where the SDK is unavailable:
@@ -13,14 +13,13 @@
 //     #if canImport(GoogleMobileAds), with linking stubs otherwise.
 //
 // Integration (per game):
-//   1. Add the Google Mobile Ads SDK via SPM: https://github.com/googleads/swift-package-manager-google-mobile-ads
-//      (targets GoogleMobileAds v12.x and GoogleUserMessagingPlatform v2.x —
-//      the "no GAD/UMP prefix" API. iOS 26 deployment needs no availability guards.)
-//   2. Add this file to the app's Xcode target alongside NativeBridge.swift.
-//   3. Set `GADApplicationIdentifier` in Info.plist to your AdMob app id (use
-//      bevy_google_admob::ads::TEST_APP_ID while developing), and add the
+//   1. Link this package's `Ads` product from your app target; it pulls in the
+//      Google Mobile Ads SDK (v12.x) and the UMP consent SDK transitively — the
+//      "no GAD/UMP prefix" API.
+//   2. Set `GADApplicationIdentifier` in Info.plist to your AdMob app id (use
+//      bevy_ios_toolkit::ads::TEST_APP_ID while developing), and add the
 //      `SKAdNetworkItems` Google ships for attribution.
-//   4. Insert AdmobConfig with your ad unit ids. Symbol prefix `admob_` won't
+//   3. Insert AdmobConfig with your ad unit ids. Symbol prefix `admob_` won't
 //      collide with the game's own bridge.
 //
 // All shared state (the event queue + cached consent status) lives behind an

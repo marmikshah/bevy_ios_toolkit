@@ -1,16 +1,16 @@
-// Platform shim for bevy_cupertino: haptics, safe-area inset, outbound links.
+// Platform shim for bevy_ios_toolkit: haptics, safe-area inset, outbound links.
 //
-// Same contract as StoreKitBridge.swift / NativeBridge.swift: @_cdecl C-ABI
-// called FROM Rust, polled getters (no callbacks into Rust). Everything that
-// needs UIKit sits behind #if canImport(UIKit) with linking stubs otherwise, so
-// the staticlib links on any target. Symbol prefix `cupertino_`.
+// Same contract as StoreKitBridge.swift: @_cdecl C-ABI called FROM Rust, polled
+// getters (no callbacks into Rust). Everything that needs UIKit sits behind
+// #if canImport(UIKit) with linking stubs otherwise, so the staticlib links on
+// any target. Symbol prefix `cupertino_`.
 //
-// Add this file to the app's Xcode target alongside StoreKitBridge.swift.
+// Shipped as this package's `Platform` product; link it from your app target.
 
 import Foundation
 
 // Tiny lock-wrapped int — Foundation has no public atomic Int; uncontended
-// (one writer per value). Mirrors NativeBridge.swift's ManagedAtomic.
+// (one writer per value) — the same atomic discipline the other shims use.
 final class CupertinoAtomicInt {
     private let lock = NSLock()
     private var raw: Int
