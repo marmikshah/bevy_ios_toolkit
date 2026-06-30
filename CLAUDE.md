@@ -29,15 +29,17 @@ messages. One crate, one `IosPlugin`, a cargo feature per integration: `storekit
   never callbacks into Rust (winit re-entrancy is unsafe).
 - Each module has two backends: `backend_ios.rs` (raw `extern "C"`) and a
   `backend_fake.rs` / inline fake for every non-iOS target, so flows are testable
-  on desktop. The Swift shims live in `swift/`, behind `#if canImport(...)`.
+  on desktop. The Swift shims live in `Sources/<Product>/`, behind
+  `#if canImport(...)`, and ship as an SPM package (`Package.swift`) — one
+  library product per feature (`Platform`/`Store`/`Ads`/`Att`/`GameCenter`/`Review`).
 - `demo/` is a separate crate (the button-per-feature app) with an iOS XcodeGen
   shell in `demo/ios/`; it is excluded from the published library.
 
 ## Hard constraints
 
 - A module's `extern "C"` block only exists when its feature is on — enabling a
-  feature whose Swift shim isn't in the Xcode target must fail at link time, not
-  at runtime. Keep the Rust feature, the Swift file, and the symbol prefix in sync.
+  feature whose SPM product isn't linked must fail at link time, not at runtime.
+  Keep the Rust feature, the Swift product, and the symbol prefix in sync.
 - No callbacks from Swift into Rust. New native state is polled or drained.
 - Open source: use generic identifiers (`com.example.*`) in examples/demo/docs.
 

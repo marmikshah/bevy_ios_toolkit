@@ -14,19 +14,19 @@ ECS resources and messages. One crate, one plugin, a **feature per integration**
 
 > **Status: experimental (0.1, pre-release).** APIs will move. Live behaviour
 > needs a real device, the relevant Apple/Google setup, and the matching Swift
-> shim in your Xcode target — see "iOS integration". Everything is fully
-> exercisable on desktop first via the built-in fakes.
+> shim linked from the companion SPM package — see "iOS integration". Everything
+> is fully exercisable on desktop first via the built-in fakes.
 
 ## How it works
 
-Every module shares one native contract (the proven `NativeBridge.swift` pattern):
+Every module shares one native contract:
 
 - Each native entry point is `@_cdecl` C-ABI, called **from Rust**.
 - The SDKs' async, delegate-driven work surfaces as **polled state** (or a
   drained event queue) read once per frame — *never* callbacks into Rust,
   because re-entrancy against winit's event loop is not safe.
-- Each Swift shim (`swift/*.swift`) sits behind `#if canImport(...)` with linking
-  stubs, so the staticlib links on any target.
+- Each Swift shim (an SPM product, see "iOS integration") sits behind
+  `#if canImport(...)` with linking stubs, so the staticlib links on any target.
 
 Off iOS every module is a **stateful, env-tunable fake**, so the whole app flow —
 purchases, ads, rewards, consent, ATT, Game Center — runs on `cargo run` desktop
@@ -35,7 +35,7 @@ builds with no device.
 ## Features are opt-in for a reason
 
 No feature is enabled by default. A module's `extern "C"` block only exists when
-its feature is on, and the matching Swift shim must be in your Xcode target — so
+its feature is on, and the matching SPM product must be linked into your app — so
 enabling a feature you haven't wired natively fails loudly at link time instead
 of misbehaving at runtime.
 
@@ -76,17 +76,34 @@ See [`demo/`](demo/) for a button-per-feature app that runs on desktop and iOS.
 
 ## iOS integration
 
+The Swift shims ship as a Swift package **in this same repo**, co-versioned with
+the crate — one git tag pins both halves, which keeps the `@_cdecl` ↔ `extern "C"`
+contract in lockstep. You link only the products for the features you ship; there
+are no files to vendor or keep in sync by hand.
+
 1. Add this crate with the features you ship.
-2. Copy the matching `swift/*.swift` shims into your app and add them to the
-   Xcode target. The symbol prefixes (`cupertino_`, `admob_`, `att_`,
-   `gamekit_`, `review_`) won't collide with your own bridge.
-3. Per-feature native setup:
-   - **ads** — add the GoogleMobileAds + UserMessagingPlatform SPM packages; set
-     `GADApplicationIdentifier` in `Info.plist` (use `TEST_APP_ID` in dev).
+2. Add this repo as a Swift package dependency and link the matching products.
+   Each product links its own system frameworks; `Ads` brings the Google Mobile
+   Ads + UMP SDKs transitively. The symbol prefixes (`cupertino_`, `admob_`,
+   `att_`, `gamekit_`, `review_`) won't collide with your own bridge.
+
+   | cargo feature | SPM product |
+   |---------------|-------------|
+   | `platform` | `Platform` |
+   | `storekit` | `Store` |
+   | `ads` | `Ads` |
+   | `att` | `Att` |
+   | `gamekit` | `GameCenter` |
+   | `review` | `Review` |
+
+3. Per-feature native setup (stays in your app — the package ships none of it):
+   - **ads** — set `GADApplicationIdentifier` in `Info.plist` (use `TEST_APP_ID`
+     in dev) and add the `SKAdNetworkItems` Google ships.
    - **att** — add `NSUserTrackingUsageDescription` to `Info.plist`.
    - **gamekit** — enable the Game Center capability.
    - **storekit** — define products in App Store Connect (or a StoreKit config).
-4. The `demo/ios/` XcodeGen project shows the whole wiring end to end.
+4. The `demo/ios/` XcodeGen project shows the whole wiring end to end — it
+   consumes the package by relative path.
 
 ## Testing
 

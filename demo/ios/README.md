@@ -35,10 +35,9 @@ Center *sign-in* works as-is; submitting to `lb.demo.highscore` /
 
 | file | role |
 |------|------|
-| `project.yml` | XcodeGen project: target, signing, Info.plist, SPM packages, Swift sources |
+| `project.yml` | XcodeGen project: target, signing, Info.plist, and the toolkit SPM package (consumed from `../..` by relative path) |
 | `build_rust.sh` | Xcode pre-build phase — `cargo build` the staticlib, stage it into `rustlib/$(PLATFORM_NAME)` |
 | `main.m` | C entry point; calls the Rust `main_rs` symbol |
-| `*.swift` | the six toolkit bridges, vendored from `../../swift/` |
 | `IosToolkitDemo.entitlements` | Game Center capability |
 | `PrivacyInfo.xcprivacy` | privacy manifest (advertising id + required-reason APIs) |
 
