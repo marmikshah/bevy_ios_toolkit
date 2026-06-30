@@ -20,13 +20,13 @@ settings:
       - -lc++
       - -ObjC
 
-# The AdMob SDK is resolved by Xcode via SPM. It depends on the UMP consent SDK,
-# so `import UserMessagingPlatform` is available transitively — no separate
-# package needed (a standalone UMP package collides on product naming).
+# The toolkit's Swift shims ship as a local SPM package (this repo's
+# Package.swift) — dogfooding it via a relative path. Its `Ads` product pulls
+# the Google Mobile Ads SDK (and the UMP consent SDK) in transitively, so no
+# separate GoogleMobileAds package is declared here.
 packages:
-  GoogleMobileAds:
-    url: https://github.com/googleads/swift-package-manager-google-mobile-ads
-    majorVersion: 12.0.0
+  BevyIosToolkit:
+    path: ../..
 
 targets:
   IosToolkitDemo:
@@ -34,15 +34,8 @@ targets:
     platform: iOS
     sources:
       - path: main.m
-      # The six bevy_ios_toolkit Swift shims, vendored from ../../swift/.
-      # Each is behind `#if canImport(...)` so it links even if a framework is
-      # absent; together they cover every feature the demo's buttons drive.
-      - path: StoreKitBridge.swift
-      - path: AdMobBridge.swift
-      - path: AppTrackingBridge.swift
-      - path: GameKitBridge.swift
-      - path: ReviewBridge.swift
-      - path: CupertinoPlatform.swift
+      # The toolkit shims are no longer vendored here — they come from the
+      # BevyIosToolkit package products listed under `dependencies` below.
       # Apple privacy manifest (advertising identifier + required-reason APIs).
       - path: PrivacyInfo.xcprivacy
     entitlements:
@@ -92,8 +85,20 @@ targets:
           - $(inherited)
           - -lbevy_ios_toolkit_demo
     dependencies:
-      # Links the GoogleMobileAds product; UMP is pulled in transitively.
-      - package: GoogleMobileAds
+      # The toolkit shims — one product per feature the demo exercises. The Ads
+      # product brings the Google Mobile Ads + UMP SDKs transitively.
+      - package: BevyIosToolkit
+        product: Platform
+      - package: BevyIosToolkit
+        product: Store
+      - package: BevyIosToolkit
+        product: Ads
+      - package: BevyIosToolkit
+        product: Att
+      - package: BevyIosToolkit
+        product: GameCenter
+      - package: BevyIosToolkit
+        product: Review
       - sdk: Metal.framework
       - sdk: QuartzCore.framework
       - sdk: UIKit.framework
