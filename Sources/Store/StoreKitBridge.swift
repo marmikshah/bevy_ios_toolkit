@@ -1,18 +1,18 @@
-// StoreKit 2 bridge for bevy_cupertino.
+// StoreKit 2 bridge for bevy_ios_toolkit.
 //
-// Design contract with the Rust side (bevy_cupertino::store):
+// Design contract with the Rust side (the bevy_ios_toolkit StoreKit module):
 //   - Every entry point is @_cdecl C-ABI, called FROM Rust.
 //   - StoreKit's async work runs in Tasks; results surface as POLLED state
 //     (Int32 / C-string getters), never callbacks into Rust — re-entrancy
-//     against winit's event loop is not safe. This mirrors NativeBridge.swift.
+//     against winit's event loop is not safe. Every shim here uses this pattern.
 //   - *_json getters return pointers to buffers owned here, valid only until
 //     the next regenerating call; Rust copies immediately.
 //   - This file must COMPILE AND LINK even where StoreKit is unavailable:
 //     everything StoreKit-specific sits behind #if canImport(StoreKit), with
 //     linking stubs otherwise.
 //
-// Integration: add this file to the app's Xcode target alongside
-// NativeBridge.swift. StoreKit is a system framework (auto-linked, no SPM).
+// Integration: link this package's `Store` product from your app target; it
+// links StoreKit (a system framework) for you.
 // Symbol prefix `cupertino_` avoids collision with the game's own bridge.
 //
 // Deployment floor iOS 26 — StoreKit 2 (iOS 15+) needs no availability guards.
