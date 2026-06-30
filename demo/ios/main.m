@@ -3,7 +3,7 @@
 // iOS backend then drives the UIApplication lifecycle from inside the Bevy app.
 //
 // The toolkit's Swift shims (StoreKitBridge / AdMobBridge / AppTrackingBridge /
-// GameKitBridge / ReviewBridge / CupertinoPlatform, listed in project.yml) expose
+// GameKitBridge / ReviewBridge / PlatformBridge, listed in project.yml) expose
 // @_cdecl symbols the Rust side calls; they need no entry point of their own.
 #import <UIKit/UIKit.h>
 

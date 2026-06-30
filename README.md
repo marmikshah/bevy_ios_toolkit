@@ -84,7 +84,7 @@ are no files to vendor or keep in sync by hand.
 1. Add this crate with the features you ship.
 2. Add this repo as a Swift package dependency and link the matching products.
    Each product links its own system frameworks; `Ads` brings the Google Mobile
-   Ads + UMP SDKs transitively. The symbol prefixes (`cupertino_`, `admob_`,
+   Ads + UMP SDKs transitively. The symbol prefixes (`store_`, `platform_`, `admob_`,
    `att_`, `gamekit_`, `review_`) won't collide with your own bridge.
 
    | cargo feature | SPM product |

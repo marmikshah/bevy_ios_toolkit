@@ -16,9 +16,9 @@ pub enum Haptic {
 #[cfg(target_os = "ios")]
 pub fn play(kind: Haptic) {
     unsafe extern "C" {
-        fn cupertino_haptic(kind: i32);
+        fn platform_haptic(kind: i32);
     }
-    unsafe { cupertino_haptic(kind as i32) };
+    unsafe { platform_haptic(kind as i32) };
 }
 
 #[cfg(not(target_os = "ios"))]

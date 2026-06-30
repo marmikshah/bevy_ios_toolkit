@@ -2,8 +2,8 @@
 //!
 //! ```text
 //! cargo run --example store
-//! BEVY_CUPERTINO_FAKE_OWNED=com.example.removeads cargo run --example store
-//! BEVY_CUPERTINO_FAKE_CANCEL=1 cargo run --example store
+//! BEVY_IOS_FAKE_OWNED=com.example.removeads cargo run --example store
+//! BEVY_IOS_FAKE_CANCEL=1 cargo run --example store
 //! ```
 //!
 //! It loads two products, buys one, prints the outcome + entitlements, exits.

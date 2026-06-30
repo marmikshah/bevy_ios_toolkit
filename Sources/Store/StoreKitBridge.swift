@@ -13,7 +13,7 @@
 //
 // Integration: link this package's `Store` product from your app target; it
 // links StoreKit (a system framework) for you.
-// Symbol prefix `cupertino_` avoids collision with the game's own bridge.
+// Symbol prefix `store_` avoids collision with the game's own bridge.
 //
 // Deployment floor iOS 26 — StoreKit 2 (iOS 15+) needs no availability guards.
 // All shared state lives behind an OSAllocatedUnfairLock so the async StoreKit
@@ -38,8 +38,8 @@ private struct StoreState {
     var purchaseProductPtr: UnsafeMutablePointer<CChar>?
 }
 
-final class CupertinoStore: @unchecked Sendable {
-    static let shared = CupertinoStore()
+final class StoreBridge: @unchecked Sendable {
+    static let shared = StoreBridge()
 
     private let state = OSAllocatedUnfairLock(initialState: StoreState())
     private var updatesTask: Task<Void, Never>?
@@ -87,7 +87,7 @@ final class CupertinoStore: @unchecked Sendable {
                     self.setPurchaseState(3)
                 }
             } catch {
-                NSLog("[cupertino] purchase failed: %@", String(describing: error))
+                NSLog("[store] purchase failed: %@", String(describing: error))
                 self.setPurchaseState(3)
             }
         }
@@ -120,7 +120,7 @@ final class CupertinoStore: @unchecked Sendable {
                 s.productsState = 1
             }
         } catch {
-            NSLog("[cupertino] product load failed: %@", String(describing: error))
+            NSLog("[store] product load failed: %@", String(describing: error))
             state.withLock { $0.productsState = 2 }
         }
     }
@@ -197,54 +197,54 @@ final class CupertinoStore: @unchecked Sendable {
     }
 }
 
-@_cdecl("cupertino_store_init")
-public func cupertino_store_init(_ ids: UnsafePointer<CChar>) {
+@_cdecl("store_init")
+public func store_init(_ ids: UnsafePointer<CChar>) {
     let list = String(cString: ids)
         .split(separator: ",")
         .map { $0.trimmingCharacters(in: .whitespaces) }
         .filter { !$0.isEmpty }
-    CupertinoStore.shared.start(ids: list)
+    StoreBridge.shared.start(ids: list)
 }
 
-@_cdecl("cupertino_store_products_state")
-public func cupertino_store_products_state() -> Int32 { CupertinoStore.shared.productsStateValue() }
+@_cdecl("store_products_state")
+public func store_products_state() -> Int32 { StoreBridge.shared.productsStateValue() }
 
-@_cdecl("cupertino_store_products_json")
-public func cupertino_store_products_json() -> UnsafePointer<CChar>? { CupertinoStore.shared.productsJSONValue() }
+@_cdecl("store_products_json")
+public func store_products_json() -> UnsafePointer<CChar>? { StoreBridge.shared.productsJSONValue() }
 
-@_cdecl("cupertino_store_purchase")
-public func cupertino_store_purchase(_ id: UnsafePointer<CChar>) { CupertinoStore.shared.purchase(String(cString: id)) }
+@_cdecl("store_purchase")
+public func store_purchase(_ id: UnsafePointer<CChar>) { StoreBridge.shared.purchase(String(cString: id)) }
 
-@_cdecl("cupertino_store_purchase_state")
-public func cupertino_store_purchase_state() -> Int32 { CupertinoStore.shared.purchaseStateValue() }
+@_cdecl("store_purchase_state")
+public func store_purchase_state() -> Int32 { StoreBridge.shared.purchaseStateValue() }
 
-@_cdecl("cupertino_store_purchase_product")
-public func cupertino_store_purchase_product() -> UnsafePointer<CChar>? { CupertinoStore.shared.purchaseProductValue() }
+@_cdecl("store_purchase_product")
+public func store_purchase_product() -> UnsafePointer<CChar>? { StoreBridge.shared.purchaseProductValue() }
 
-@_cdecl("cupertino_store_purchase_clear")
-public func cupertino_store_purchase_clear() { CupertinoStore.shared.clearPurchase() }
+@_cdecl("store_purchase_clear")
+public func store_purchase_clear() { StoreBridge.shared.clearPurchase() }
 
-@_cdecl("cupertino_store_restore")
-public func cupertino_store_restore() { CupertinoStore.shared.restore() }
+@_cdecl("store_restore")
+public func store_restore() { StoreBridge.shared.restore() }
 
-@_cdecl("cupertino_store_entitlements_rev")
-public func cupertino_store_entitlements_rev() -> UInt64 { CupertinoStore.shared.entRevValue() }
+@_cdecl("store_entitlements_rev")
+public func store_entitlements_rev() -> UInt64 { StoreBridge.shared.entRevValue() }
 
-@_cdecl("cupertino_store_entitlements_json")
-public func cupertino_store_entitlements_json() -> UnsafePointer<CChar>? { CupertinoStore.shared.entitlementsJSONValue() }
+@_cdecl("store_entitlements_json")
+public func store_entitlements_json() -> UnsafePointer<CChar>? { StoreBridge.shared.entitlementsJSONValue() }
 
 #else
 // StoreKit unavailable: linking stubs. Products report failed, nothing owned.
 
-@_cdecl("cupertino_store_init") public func cupertino_store_init(_ ids: UnsafePointer<CChar>) {}
-@_cdecl("cupertino_store_products_state") public func cupertino_store_products_state() -> Int32 { 2 }
-@_cdecl("cupertino_store_products_json") public func cupertino_store_products_json() -> UnsafePointer<CChar>? { nil }
-@_cdecl("cupertino_store_purchase") public func cupertino_store_purchase(_ id: UnsafePointer<CChar>) {}
-@_cdecl("cupertino_store_purchase_state") public func cupertino_store_purchase_state() -> Int32 { 0 }
-@_cdecl("cupertino_store_purchase_product") public func cupertino_store_purchase_product() -> UnsafePointer<CChar>? { nil }
-@_cdecl("cupertino_store_purchase_clear") public func cupertino_store_purchase_clear() {}
-@_cdecl("cupertino_store_restore") public func cupertino_store_restore() {}
-@_cdecl("cupertino_store_entitlements_rev") public func cupertino_store_entitlements_rev() -> UInt64 { 0 }
-@_cdecl("cupertino_store_entitlements_json") public func cupertino_store_entitlements_json() -> UnsafePointer<CChar>? { nil }
+@_cdecl("store_init") public func store_init(_ ids: UnsafePointer<CChar>) {}
+@_cdecl("store_products_state") public func store_products_state() -> Int32 { 2 }
+@_cdecl("store_products_json") public func store_products_json() -> UnsafePointer<CChar>? { nil }
+@_cdecl("store_purchase") public func store_purchase(_ id: UnsafePointer<CChar>) {}
+@_cdecl("store_purchase_state") public func store_purchase_state() -> Int32 { 0 }
+@_cdecl("store_purchase_product") public func store_purchase_product() -> UnsafePointer<CChar>? { nil }
+@_cdecl("store_purchase_clear") public func store_purchase_clear() {}
+@_cdecl("store_restore") public func store_restore() {}
+@_cdecl("store_entitlements_rev") public func store_entitlements_rev() -> UInt64 { 0 }
+@_cdecl("store_entitlements_json") public func store_entitlements_json() -> UnsafePointer<CChar>? { nil }
 
 #endif

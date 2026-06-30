@@ -5,10 +5,10 @@
 #[cfg(target_os = "ios")]
 pub fn open(url: &str) {
     unsafe extern "C" {
-        fn cupertino_open_url(url: *const std::ffi::c_char);
+        fn platform_open_url(url: *const std::ffi::c_char);
     }
     if let Ok(c) = std::ffi::CString::new(url) {
-        unsafe { cupertino_open_url(c.as_ptr()) };
+        unsafe { platform_open_url(c.as_ptr()) };
     }
 }
 

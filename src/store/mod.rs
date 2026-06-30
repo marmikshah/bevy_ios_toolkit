@@ -129,11 +129,11 @@ fn init(ids: &[String]) {
     let Ok(joined) = CString::new(ids.join(",")) else {
         return;
     };
-    unsafe { backend::cupertino_store_init(joined.as_ptr()) };
+    unsafe { backend::store_init(joined.as_ptr()) };
 }
 
 fn products_state() -> ProductsState {
-    match unsafe { backend::cupertino_store_products_state() } {
+    match unsafe { backend::store_products_state() } {
         1 => ProductsState::Ready,
         2 => ProductsState::Failed,
         _ => ProductsState::Loading,
@@ -141,7 +141,7 @@ fn products_state() -> ProductsState {
 }
 
 fn products() -> Vec<ProductInfo> {
-    let json = unsafe { read_cstr(backend::cupertino_store_products_json()) };
+    let json = unsafe { read_cstr(backend::store_products_json()) };
     serde_json::from_str(&json).unwrap_or_default()
 }
 
@@ -149,36 +149,36 @@ fn purchase(id: &str) {
     let Ok(id) = CString::new(id) else {
         return;
     };
-    unsafe { backend::cupertino_store_purchase(id.as_ptr()) };
+    unsafe { backend::store_purchase(id.as_ptr()) };
 }
 
 /// Returns the terminal outcome (if any) and the product it refers to.
 fn purchase_result() -> Option<(PurchaseOutcome, String)> {
-    let outcome = match unsafe { backend::cupertino_store_purchase_state() } {
+    let outcome = match unsafe { backend::store_purchase_state() } {
         2 => PurchaseOutcome::Success,
         3 => PurchaseOutcome::Failed,
         4 => PurchaseOutcome::Cancelled,
         5 => PurchaseOutcome::Pending,
         _ => return None,
     };
-    let product = unsafe { read_cstr(backend::cupertino_store_purchase_product()) };
+    let product = unsafe { read_cstr(backend::store_purchase_product()) };
     Some((outcome, product))
 }
 
 fn purchase_clear() {
-    unsafe { backend::cupertino_store_purchase_clear() };
+    unsafe { backend::store_purchase_clear() };
 }
 
 fn restore() {
-    unsafe { backend::cupertino_store_restore() };
+    unsafe { backend::store_restore() };
 }
 
 fn entitlements_rev() -> u64 {
-    unsafe { backend::cupertino_store_entitlements_rev() }
+    unsafe { backend::store_entitlements_rev() }
 }
 
 fn fetch_entitlements() -> Vec<String> {
-    let json = unsafe { read_cstr(backend::cupertino_store_entitlements_json()) };
+    let json = unsafe { read_cstr(backend::store_entitlements_json()) };
     serde_json::from_str(&json).unwrap_or_default()
 }
 
