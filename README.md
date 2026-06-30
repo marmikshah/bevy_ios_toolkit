@@ -40,7 +40,7 @@ enabling a feature you haven't wired natively fails loudly at link time instead
 of misbehaving at runtime.
 
 ```toml
-bevy_ios_toolkit = { version = "0.1", features = ["storekit", "ads", "att"] }
+bevy_ios_toolkit = { version = "0.2", features = ["storekit", "ads", "att"] }
 ```
 
 ## Quick start
@@ -122,7 +122,7 @@ simulate Apple's or Google's servers.
 
 | `bevy_ios_toolkit` | `bevy` | iOS | AdMob SDK |
 |--------------------|--------|-----|-----------|
-| 0.1                | 0.19   | 16+ | 12.x (+ UMP 2.x) |
+| 0.2                | 0.19   | 16+ | 12.x (+ UMP 2.x) |
 
 ## Authorship
 
