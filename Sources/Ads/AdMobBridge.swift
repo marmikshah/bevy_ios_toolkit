@@ -116,19 +116,22 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     @MainActor
     private func refreshConsentInfo(present: Bool) {
         #if canImport(UserMessagingPlatform)
-        let params = UMPRequestParameters()
-        UMPConsentInformation.sharedInstance.requestConsentInfoUpdate(with: params) { [weak self] error in
+        Task { @MainActor [weak self] in
             guard let self else { return }
-            if let error {
+            do {
+                try await UMPConsentInformation.sharedInstance
+                    .requestConsentInfoUpdate(with: UMPRequestParameters())
+            } catch {
                 NSLog("[admob] consent info update failed: %@", String(describing: error))
             }
-            Task { @MainActor in
-                self.cacheConsentStatus()
-                if present, let vc = self.rootViewController() {
-                    UMPConsentForm.loadAndPresentIfRequired(from: vc) { [weak self] _ in
-                        Task { @MainActor in self?.cacheConsentStatus() }
-                    }
+            self.cacheConsentStatus()
+            if present, let vc = self.rootViewController() {
+                do {
+                    try await UMPConsentForm.loadAndPresentIfRequired(from: vc)
+                } catch {
+                    NSLog("[admob] consent form failed: %@", String(describing: error))
                 }
+                self.cacheConsentStatus()
             }
         }
         #else
