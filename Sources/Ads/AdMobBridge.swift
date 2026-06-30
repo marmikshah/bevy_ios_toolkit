@@ -119,15 +119,15 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                try await UMPConsentInformation.sharedInstance
-                    .requestConsentInfoUpdate(with: UMPRequestParameters())
+                try await ConsentInformation.shared
+                    .requestConsentInfoUpdate(with: RequestParameters())
             } catch {
                 NSLog("[admob] consent info update failed: %@", String(describing: error))
             }
             self.cacheConsentStatus()
             if present, let vc = self.rootViewController() {
                 do {
-                    try await UMPConsentForm.loadAndPresentIfRequired(from: vc)
+                    try await ConsentForm.loadAndPresentIfRequired(from: vc)
                 } catch {
                     NSLog("[admob] consent form failed: %@", String(describing: error))
                 }
@@ -143,7 +143,7 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     private func cacheConsentStatus() {
         #if canImport(UserMessagingPlatform)
         let value: Int32
-        switch UMPConsentInformation.sharedInstance.consentStatus {
+        switch ConsentInformation.shared.consentStatus {
         case .required: value = 1
         case .notRequired: value = 2
         case .obtained: value = 3
