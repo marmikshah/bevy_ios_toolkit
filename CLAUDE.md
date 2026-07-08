@@ -7,7 +7,7 @@ Agent onboarding. `make` is the entry point; keep this short and current.
 Native iOS integrations for the Bevy engine, exposed as ECS resources and
 messages. One crate, one `IosPlugin`, a cargo feature per integration: `storekit`
 (IAP), `ads` (AdMob + UMP consent), `att` (App Tracking Transparency), `gamekit`
-(Game Center), `review`, `platform` (haptics / safe-area / links).
+(Game Center), `review`, `platform` (haptics / safe-area / links / boot-shield).
 
 ## Entry point
 
