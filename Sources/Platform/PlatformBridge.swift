@@ -22,7 +22,47 @@ final class AtomicInt {
 }
 
 #if canImport(UIKit)
+import AVFoundation
 import UIKit
+
+// MARK: - Audio session
+
+// Retained so the foreground-reassert observer is installed at most once.
+@MainActor private var audioSessionObserver: NSObjectProtocol?
+
+/// Own the app's audio session so nothing else — a full-screen video ad
+/// reconfiguring it, the OS default — can leave the game muted. `playback` != 0
+/// keeps sound on with the ring switch off (audio as a game feature, gated by
+/// an in-app toggle); otherwise `.ambient` respects the switch. `mixWithOthers`
+/// != 0 lets the player's own music keep playing. Re-asserted on every
+/// foreground return, which covers cold boot AND a full-screen ad dismissing.
+@_cdecl("platform_configure_audio_session")
+public func platform_configure_audio_session(_ playback: Int32, _ mixWithOthers: Int32) {
+    let usePlayback = playback != 0
+    let mix = mixWithOthers != 0
+    DispatchQueue.main.async {
+        applyAudioSession(playback: usePlayback, mix: mix)
+        if audioSessionObserver == nil {
+            audioSessionObserver = NotificationCenter.default.addObserver(
+                forName: UIApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { _ in applyAudioSession(playback: usePlayback, mix: mix) }
+        }
+    }
+}
+
+private func applyAudioSession(playback: Bool, mix: Bool) {
+    let session = AVAudioSession.sharedInstance()
+    let category: AVAudioSession.Category = playback ? .playback : .ambient
+    let options: AVAudioSession.CategoryOptions = mix ? [.mixWithOthers] : []
+    do {
+        try session.setCategory(category, options: options)
+        try session.setActive(true)
+    } catch {
+        // Non-fatal: worst case the OS default session stands.
+    }
+}
 
 // MARK: - Haptics
 
@@ -157,6 +197,7 @@ public func platform_boot_shield_dismiss() {
 #else
 // UIKit unavailable: linking stubs.
 
+@_cdecl("platform_configure_audio_session") public func platform_configure_audio_session(_ playback: Int32, _ mixWithOthers: Int32) {}
 @_cdecl("platform_haptic") public func platform_haptic(_ kind: Int32) {}
 @_cdecl("platform_safe_top") public func platform_safe_top() -> Float { 0 }
 @_cdecl("platform_safe_bottom") public func platform_safe_bottom() -> Float { 0 }
