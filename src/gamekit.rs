@@ -33,23 +33,16 @@ mod backend {
 
 #[cfg(not(target_os = "ios"))]
 mod backend {
-    use std::ffi::{CStr, c_char};
+    use std::ffi::c_char;
     use std::sync::atomic::{AtomicI32, Ordering};
     use std::sync::{LazyLock, Mutex};
+
+    use crate::ffi::read_cstr;
 
     static STATE: AtomicI32 = AtomicI32::new(0);
     static SCORES: LazyLock<Mutex<Vec<(String, i64)>>> = LazyLock::new(|| Mutex::new(Vec::new()));
     static ACHIEVEMENTS: LazyLock<Mutex<Vec<(String, f64)>>> =
         LazyLock::new(|| Mutex::new(Vec::new()));
-
-    unsafe fn cstr(ptr: *const c_char) -> String {
-        if ptr.is_null() {
-            return String::new();
-        }
-        unsafe { CStr::from_ptr(ptr) }
-            .to_string_lossy()
-            .into_owned()
-    }
 
     pub unsafe fn gamekit_authenticate() {
         let unavailable = std::env::var("BEVY_IOS_FAKE_GAMECENTER")
@@ -63,7 +56,7 @@ mod backend {
     }
 
     pub unsafe fn gamekit_submit_score(leaderboard_id: *const c_char, score: i64) {
-        let id = unsafe { cstr(leaderboard_id) };
+        let id = unsafe { read_cstr(leaderboard_id) };
         SCORES
             .lock()
             .unwrap_or_else(|p| p.into_inner())
@@ -71,7 +64,7 @@ mod backend {
     }
 
     pub unsafe fn gamekit_report_achievement(achievement_id: *const c_char, percent: f64) {
-        let id = unsafe { cstr(achievement_id) };
+        let id = unsafe { read_cstr(achievement_id) };
         ACHIEVEMENTS
             .lock()
             .unwrap_or_else(|p| p.into_inner())
