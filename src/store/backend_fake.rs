@@ -10,8 +10,10 @@
 //! - `BEVY_IOS_FAKE_CANCEL` — purchases report user-cancelled.
 
 use std::collections::BTreeSet;
-use std::ffi::{CStr, CString, c_char};
+use std::ffi::{CString, c_char};
 use std::sync::{LazyLock, Mutex};
+
+use crate::ffi::read_cstr;
 
 use super::ProductInfo;
 
@@ -67,17 +69,8 @@ fn lock() -> std::sync::MutexGuard<'static, Fake> {
     FAKE.lock().unwrap_or_else(|p| p.into_inner())
 }
 
-unsafe fn cstr(ptr: *const c_char) -> String {
-    if ptr.is_null() {
-        return String::new();
-    }
-    unsafe { CStr::from_ptr(ptr) }
-        .to_string_lossy()
-        .into_owned()
-}
-
 pub unsafe fn store_init(ids: *const c_char) {
-    let ids = unsafe { cstr(ids) };
+    let ids = unsafe { read_cstr(ids) };
     let mut f = lock();
     f.product_ids = ids
         .split(',')
@@ -105,7 +98,7 @@ pub unsafe fn store_products_json() -> *const c_char {
 }
 
 pub unsafe fn store_purchase(id: *const c_char) {
-    let id = unsafe { cstr(id) };
+    let id = unsafe { read_cstr(id) };
     let mut f = lock();
     f.purchase_product = id.clone();
     if std::env::var("BEVY_IOS_FAKE_FAIL").is_ok() {

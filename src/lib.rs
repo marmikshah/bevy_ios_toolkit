@@ -10,7 +10,7 @@
 //! | `att` | [`att`] | App Tracking Transparency prompt |
 //! | `gamekit` | [`gamekit`] | Game Center auth, leaderboards, achievements |
 //! | `review` | [`review`] | StoreKit review prompt |
-//! | `platform` | [`platform`] | haptics, safe-area inset, outbound links |
+//! | `platform` | [`platform`] | haptics, safe-area insets, links, boot shield, audio session |
 //!
 //! No feature is on by default. Enable exactly what you ship — a module's
 //! `extern "C"` block only exists when its feature is on, and the matching Swift
@@ -47,7 +47,7 @@
 
 use bevy::prelude::*;
 
-#[cfg(any(feature = "storekit", feature = "ads"))]
+#[cfg(any(feature = "storekit", feature = "ads", feature = "gamekit"))]
 mod ffi;
 
 #[cfg(feature = "storekit")]
