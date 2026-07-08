@@ -47,21 +47,44 @@ public func platform_haptic(_ kind: Int32) {
 
 // MARK: - Safe area
 
-/// Top safe-area inset in points, cached so Rust can poll it synchronously from
-/// any thread. The first call may return 0; callers re-ask after the window
+/// Safe-area insets in points, cached so Rust can poll each edge synchronously
+/// from any thread. The first call may return 0; callers re-ask after the window
 /// exists.
 private let safeTopCache = AtomicInt(0)
+private let safeBottomCache = AtomicInt(0)
+private let safeLeftCache = AtomicInt(0)
+private let safeRightCache = AtomicInt(0)
+
+/// The key window's insets, or zeros before one exists.
+@MainActor private func keyWindowInsets() -> UIEdgeInsets {
+    UIApplication.shared.connectedScenes
+        .compactMap { $0 as? UIWindowScene }
+        .flatMap { $0.windows }
+        .first { $0.isKeyWindow }?.safeAreaInsets ?? .zero
+}
 
 @_cdecl("platform_safe_top")
 public func platform_safe_top() -> Float {
-    DispatchQueue.main.async {
-        let inset = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-            .first { $0.isKeyWindow }?.safeAreaInsets.top ?? 0
-        safeTopCache.value = Int(inset.rounded())
-    }
+    DispatchQueue.main.async { safeTopCache.value = Int(keyWindowInsets().top.rounded()) }
     return Float(safeTopCache.value)
+}
+
+@_cdecl("platform_safe_bottom")
+public func platform_safe_bottom() -> Float {
+    DispatchQueue.main.async { safeBottomCache.value = Int(keyWindowInsets().bottom.rounded()) }
+    return Float(safeBottomCache.value)
+}
+
+@_cdecl("platform_safe_left")
+public func platform_safe_left() -> Float {
+    DispatchQueue.main.async { safeLeftCache.value = Int(keyWindowInsets().left.rounded()) }
+    return Float(safeLeftCache.value)
+}
+
+@_cdecl("platform_safe_right")
+public func platform_safe_right() -> Float {
+    DispatchQueue.main.async { safeRightCache.value = Int(keyWindowInsets().right.rounded()) }
+    return Float(safeRightCache.value)
 }
 
 // MARK: - Outbound links
@@ -80,6 +103,9 @@ public func platform_open_url(_ url: UnsafePointer<CChar>) {
 
 @_cdecl("platform_haptic") public func platform_haptic(_ kind: Int32) {}
 @_cdecl("platform_safe_top") public func platform_safe_top() -> Float { 0 }
+@_cdecl("platform_safe_bottom") public func platform_safe_bottom() -> Float { 0 }
+@_cdecl("platform_safe_left") public func platform_safe_left() -> Float { 0 }
+@_cdecl("platform_safe_right") public func platform_safe_right() -> Float { 0 }
 @_cdecl("platform_open_url") public func platform_open_url(_ url: UnsafePointer<CChar>) {}
 
 #endif

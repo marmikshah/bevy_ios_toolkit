@@ -1,4 +1,4 @@
-//! Apple-platform niceties: impact [`haptics`], the top [`safe_area`] inset, and
+//! Apple-platform niceties: impact [`haptics`], the [`safe_area`] insets, and
 //! opening outbound [`links`]. Thin, fire-and-forget wrappers over
 //! `Sources/Platform/PlatformBridge.swift`; no-ops off iOS (links shell out to `open` on
 //! macOS so the flow is debuggable on desktop).
@@ -10,7 +10,7 @@
 //! use bevy_ios_toolkit::platform::{haptics, safe_area, links, Haptic};
 //!
 //! haptics::play(Haptic::Light);
-//! let inset = safe_area::top();
+//! let inset = safe_area::top(); // or safe_area::insets() for all four edges
 //! links::open("https://example.com");
 //! ```
 
