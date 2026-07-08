@@ -1,11 +1,15 @@
-//! Apple-platform niceties: impact [`haptics`], the [`safe_area`] insets,
-//! opening outbound [`links`], a first-frame [`boot_shield`], and owning the
-//! [`audio`] session. Thin, fire-and-forget wrappers over
-//! `Sources/Platform/PlatformBridge.swift`; no-ops off iOS (links shell out to
-//! `open` on macOS so the flow is debuggable on desktop).
+//! Apple-platform integrations that need no plugin — plain, fire-and-forget
+//! functions, no-ops off iOS. Thin wrappers over the `Platform` Swift shim (one
+//! `.swift` file per concern under `Sources/Platform/`).
 //!
-//! These are plain functions — call them from any system. There's no plugin and
-//! no state to wire.
+//! Two groups:
+//!
+//! - **Input/display niceties** — stateless one-shots: impact/notification/
+//!   selection [`haptics`], the four-sided [`safe_area`] insets, and opening
+//!   outbound [`links`].
+//! - **App lifecycle & session** ([`lifecycle`]) — tied to the running app:
+//!   the first-frame [`boot_shield`] and owning the [`audio`] session. Re-exported
+//!   flat here for convenience.
 //!
 //! ```no_run
 //! use bevy_ios_toolkit::platform::{haptics, safe_area, links, boot_shield, audio, Haptic};
@@ -17,10 +21,10 @@
 //! audio::configure(true, true); // own the session so ads can't mute the game
 //! ```
 
-pub mod audio;
-pub mod boot_shield;
 pub mod haptics;
+pub mod lifecycle;
 pub mod links;
 pub mod safe_area;
 
 pub use haptics::Haptic;
+pub use lifecycle::{audio, boot_shield};
