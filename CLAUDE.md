@@ -7,7 +7,8 @@ Agent onboarding. `make` is the entry point; keep this short and current.
 Native iOS integrations for the Bevy engine, exposed as ECS resources and
 messages. One crate, one `IosPlugin`, a cargo feature per integration: `storekit`
 (IAP), `ads` (AdMob + UMP consent), `att` (App Tracking Transparency), `gamekit`
-(Game Center), `review`, `platform` (haptics / safe-area / links / boot-shield).
+(Game Center), `review`, `platform` (haptics / safe-area / links / boot-shield /
+audio-session).
 
 ## Entry point
 
@@ -23,15 +24,29 @@ messages. One crate, one `IosPlugin`, a cargo feature per integration: `storekit
 
 ## Architecture
 
-- `src/<module>/` (or `src/<module>.rs`) per feature; each is `#[cfg(feature = ...)]`.
+- One module per feature, each `#[cfg(feature = ...)]`.
 - The native contract (shared, see `src/ffi.rs`): `@_cdecl` Swift entry points
   called from Rust; results read back as **polled state / a drained event queue**,
-  never callbacks into Rust (winit re-entrancy is unsafe).
-- Each module has two backends: `backend_ios.rs` (raw `extern "C"`) and a
-  `backend_fake.rs` / inline fake for every non-iOS target, so flows are testable
-  on desktop. The Swift shims live in `Sources/<Product>/`, behind
-  `#if canImport(...)`, and ship as an SPM package (`Package.swift`) — one
-  library product per feature (`Platform`/`Store`/`Ads`/`Att`/`GameCenter`/`Review`).
+  never callbacks into Rust (winit re-entrancy is unsafe). `ffi::read_cstr` is the
+  one shared marshalling helper (used by the string-passing modules — store, ads,
+  gamekit — and their fakes); don't re-roll it per module.
+- **Module shape follows complexity — pick the lightest that fits, don't mix:**
+  - *Heavy* (pollable state + FFI string marshalling): a **directory** —
+    `mod.rs` + `backend_ios.rs` (raw `extern "C"`) + `backend_fake.rs` (stateful,
+    env-tunable desktop fake). Used by `store/`, `ads/`.
+  - *Simple state* (an i32 status to poll, no string buffers back): a **single
+    file** with inline `#[cfg] mod backend` twice — iOS externs + inline fake.
+    Used by `gamekit.rs`, `att.rs`.
+  - *Fire-and-forget* (no state, no fake worth writing): a **single file** (or a
+    submodule under a grouped dir) with bare `#[cfg] fn` pairs — the iOS extern
+    call and a non-iOS no-op. Used by `platform/` (`haptics`, `safe_area`,
+    `links`) and its `platform/lifecycle/` group (`boot_shield`, `audio`), and
+    `review.rs`.
+- Swift shims live in `Sources/<Product>/`, behind `#if canImport(...)`, and ship
+  as an SPM package (`Package.swift`) — one library product per feature
+  (`Platform`/`Store`/`Ads`/`Att`/`GameCenter`/`Review`). Mirror the Rust split:
+  one `.swift` file per concern (see `Sources/Platform/` — `Haptics.swift`,
+  `SafeArea.swift`, …), not one monolith.
 - `demo/` is a separate crate (the button-per-feature app) with an iOS XcodeGen
   shell in `demo/ios/`; it is excluded from the published library.
 
