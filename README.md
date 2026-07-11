@@ -134,5 +134,4 @@ real device before relying on it in production. Bug reports and PRs welcome.
 
 ## License
 
-Licensed under either of [Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT) at
-your option.
+Released under the [MIT License](LICENSE).
