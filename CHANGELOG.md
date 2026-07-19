@@ -13,6 +13,14 @@ version history and the git log.
   topmost view controller so it still appears with a modal up, and anchors the
   iPad popover (a nil source view traps). Fire-and-forget — the chosen activity
   and the cancel path are not reported back.
+- `platform::power` (Platform product): `PowerState` — `ProcessInfo`'s thermal
+  state and Low Power Mode — as a polled resource, plus a `PowerStateChanged`
+  message on each transition, for Apple's adaptive-quality pattern. Swift-side
+  values are cached and refreshed from the two change notifications, so a
+  per-frame poll costs an atomic read. Env-tunable off iOS
+  (`BEVY_IOS_FAKE_THERMAL`, `BEVY_IOS_FAKE_LOW_POWER`).
+- `PlatformPlugin`, installed by `IosPlugin` when the `platform` feature is on.
+  The module's fire-and-forget functions still need no plugin.
 
 ## 0.2.2 — 2026-07-11
 

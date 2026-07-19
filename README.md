@@ -10,7 +10,7 @@ ECS resources and messages. One crate, one plugin, a **feature per integration**
 | `att` | `att` | App Tracking Transparency prompt |
 | `gamekit` | `gamekit` | Game Center auth, leaderboards, achievements |
 | `review` | `review` | StoreKit review prompt |
-| `platform` | `platform` | haptics, safe-area insets, outbound links, share sheet |
+| `platform` | `platform` | haptics, safe-area insets, outbound links, share sheet, thermal/low-power state |
 
 > **Status: experimental (0.1, pre-release).** APIs will move. Live behaviour
 > needs a real device, the relevant Apple/Google setup, and the matching Swift
