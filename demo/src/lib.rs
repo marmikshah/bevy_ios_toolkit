@@ -77,6 +77,7 @@ enum Action {
     Consent,
     Tracking,
     Haptic,
+    Share,
     Review,
     GameCenter,
 }
@@ -89,6 +90,7 @@ const ROWS: &[(&str, Action)] = &[
     ("Request Ad Consent", Action::Consent),
     ("Request Tracking (ATT)", Action::Tracking),
     ("Haptic Tap", Action::Haptic),
+    ("Share Result", Action::Share),
     ("Ask for Review", Action::Review),
     ("Game Center", Action::GameCenter),
 ];
@@ -227,6 +229,9 @@ fn on_button_press(
             }
             Action::Haptic => {
                 platform::haptics::play(Haptic::Medium);
+            }
+            Action::Share => {
+                platform::share::text("bevy_ios_toolkit demo — 4200 points");
             }
             Action::Review => {
                 review::request();
