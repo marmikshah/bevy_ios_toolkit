@@ -10,7 +10,7 @@
 //! | `att` | [`att`] | App Tracking Transparency prompt |
 //! | `gamekit` | [`gamekit`] | Game Center auth, leaderboards, achievements |
 //! | `review` | [`review`] | StoreKit review prompt |
-//! | `platform` | [`platform`] | haptics, safe-area insets, links, share sheet, boot shield, audio session |
+//! | `platform` | [`platform`] | haptics, safe-area insets, links, share sheet, thermal/low-power state, boot shield, audio session |
 //!
 //! No feature is on by default. Enable exactly what you ship — a module's
 //! `extern "C"` block only exists when its feature is on, and the matching Swift
@@ -87,7 +87,7 @@ pub mod prelude {
     };
 
     #[cfg(feature = "platform")]
-    pub use crate::platform::{self, Haptic};
+    pub use crate::platform::{self, Haptic, PowerState, PowerStateChanged, ThermalState};
 
     #[cfg(feature = "att")]
     pub use crate::att::{RequestTracking, TrackingStatus, TrackingStatusChanged};
@@ -116,7 +116,9 @@ impl Plugin for IosPlugin {
         app.add_plugins(att::AttPlugin);
         #[cfg(feature = "gamekit")]
         app.add_plugins(gamekit::GameKitPlugin);
-        // `platform` and `review` are function-only modules — nothing to wire.
+        #[cfg(feature = "platform")]
+        app.add_plugins(platform::PlatformPlugin);
+        // `review` is a function-only module — nothing to wire.
         let _ = app;
     }
 }

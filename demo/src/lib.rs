@@ -298,17 +298,20 @@ fn update_status(
     admob: Res<AdmobState>,
     att: Res<TrackingStatus>,
     gc: Res<GameCenter>,
+    power: Res<PowerState>,
 ) {
     let Ok(mut text) = status.single_mut() else {
         return;
     };
     let owns = entitlements.owns(REMOVE_ADS);
     text.0 = format!(
-        "ads-removed: {owns} | interstitial: {:?} | banner: {} | consent: {:?} | att: {:?} | gc: {:?}",
+        "ads-removed: {owns} | interstitial: {:?} | banner: {} | consent: {:?} | att: {:?} | gc: {:?} | thermal: {:?}{}",
         inventory.state(AdFormat::Interstitial),
         admob.banner_visible,
         admob.consent,
         *att,
         gc.auth,
+        power.thermal,
+        if power.low_power_mode { " (low power)" } else { "" },
     );
 }
