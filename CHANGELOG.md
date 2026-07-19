@@ -7,6 +7,13 @@ version history and the git log.
 
 ## Unreleased
 
+### Added
+- `platform::share::text(&str)` (Platform product): present the system share
+  sheet (`UIActivityViewController`) with a block of text. Presents from the
+  topmost view controller so it still appears with a modal up, and anchors the
+  iPad popover (a nil source view traps). Fire-and-forget — the chosen activity
+  and the cancel path are not reported back.
+
 ## 0.2.2 — 2026-07-11
 
 ### Added
