@@ -7,6 +7,8 @@ version history and the git log.
 
 ## Unreleased
 
+## 0.3.0 — 2026-07-19
+
 ### Added
 - `platform::share::text(&str)` (Platform product): present the system share
   sheet (`UIActivityViewController`) with a block of text. Presents from the

@@ -17,7 +17,7 @@
 //! shim must be in your Xcode target or iOS linking fails on undefined symbols.
 //!
 //! ```toml
-//! bevy_ios_toolkit = { version = "0.1", features = ["storekit", "ads", "att"] }
+//! bevy_ios_toolkit = { version = "0.3", features = ["storekit", "ads", "att"] }
 //! ```
 //!
 //! # The native contract
