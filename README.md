@@ -12,7 +12,7 @@ ECS resources and messages. One crate, one plugin, a **feature per integration**
 | `review` | `review` | StoreKit review prompt |
 | `platform` | `platform` | haptics, safe-area insets, outbound links, share sheet, thermal/low-power state |
 
-> **Status: experimental (0.1, pre-release).** APIs will move. Live behaviour
+> **Status: experimental (0.3, pre-release).** APIs will move. Live behaviour
 > needs a real device, the relevant Apple/Google setup, and the matching Swift
 > shim linked from the companion SPM package — see "iOS integration". Everything
 > is fully exercisable on desktop first via the built-in fakes.
@@ -40,7 +40,7 @@ enabling a feature you haven't wired natively fails loudly at link time instead
 of misbehaving at runtime.
 
 ```toml
-bevy_ios_toolkit = { version = "0.2", features = ["storekit", "ads", "att"] }
+bevy_ios_toolkit = { version = "0.3", features = ["storekit", "ads", "att"] }
 ```
 
 ## Quick start
@@ -122,7 +122,7 @@ simulate Apple's or Google's servers.
 
 | `bevy_ios_toolkit` | `bevy` | iOS | AdMob SDK |
 |--------------------|--------|-----|-----------|
-| 0.2                | 0.19   | 16+ | 12.x (+ UMP 2.x) |
+| 0.3                | 0.19   | 16+ | 12.x (+ UMP 2.x) |
 
 ## Authorship
 
