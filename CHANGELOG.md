@@ -7,6 +7,13 @@ version history and the git log.
 
 ## Unreleased
 
+## 0.3.1 — 2026-07-28
+
+### Fixed
+- Give the boot-shield window a root view controller before making it visible,
+  preventing the iOS 26 launch assertion while preserving the cover over an
+  uninitialized Metal surface.
+
 ## 0.3.0 — 2026-07-19
 
 ### Added
