@@ -21,12 +21,19 @@ public func platform_boot_shield_show(_ r: Float, _ g: Float, _ b: Float) {
             .first { $0.activationState == .foregroundActive } ?? UIApplication.shared
             .connectedScenes.compactMap { $0 as? UIWindowScene }.first
         let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow(frame: UIScreen.main.bounds)
+        let background = UIColor(
+            red: CGFloat(r), green: CGFloat(g), blue: CGFloat(b), alpha: 1.0)
+        // iOS 26 requires every visible application window to own a root view
+        // controller before launch completes. The controller also gives the
+        // shield an opaque content view instead of relying on window backing.
+        let controller = UIViewController()
+        controller.view.backgroundColor = background
+        window.rootViewController = controller
         // Above everything, non-interactive, so it never eats input meant for the
         // game and always sits over the Metal layer.
         window.windowLevel = .alert + 1
         window.isUserInteractionEnabled = false
-        window.backgroundColor = UIColor(
-            red: CGFloat(r), green: CGFloat(g), blue: CGFloat(b), alpha: 1.0)
+        window.backgroundColor = background
         window.isHidden = false
         bootShieldWindow = window
     }
