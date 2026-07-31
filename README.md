@@ -70,6 +70,13 @@ fn show(inv: Res<AdInventory>, mut shows: MessageWriter<ShowAd>) {
 fn gate(entitlements: Res<Entitlements>) {
     if entitlements.owns("com.example.app.removeads") { /* hide ads */ }
 }
+
+// Keep this action visible only when UMP requires it. Send
+// `PresentPrivacyOptions` from the user's tap to reopen their choices.
+fn privacy_entry_point(requirement: Res<PrivacyOptionsRequirement>) {
+    let visible = *requirement == PrivacyOptionsRequirement::Required;
+    /* project `visible` into your UI */
+}
 ```
 
 See [`demo/`](demo/) for a button-per-feature app that runs on desktop and iOS.
@@ -98,7 +105,9 @@ are no files to vendor or keep in sync by hand.
 
 3. Per-feature native setup (stays in your app — the package ships none of it):
    - **ads** — set `GADApplicationIdentifier` in `Info.plist` (use `TEST_APP_ID`
-     in dev) and add the `SKAdNetworkItems` Google ships.
+     in dev), add the `SKAdNetworkItems` Google ships, and provide a visible
+     action that sends `PresentPrivacyOptions` whenever the
+     `PrivacyOptionsRequirement` resource is `Required`.
    - **att** — add `NSUserTrackingUsageDescription` to `Info.plist`.
    - **gamekit** — enable the Game Center capability.
    - **storekit** — define products in App Store Connect (or a StoreKit config).
@@ -113,16 +122,20 @@ cargo run --example store --features storekit
 cargo run --example ads   --features ads
 ```
 
-The fakes are env-tunable (force no-fill, show-failures, consent prompts, ATT
-outcomes, Game Center sign-out) — each module documents its knobs. On-device
-behaviour must be validated in Xcode with the SDKs linked; this crate can't
-simulate Apple's or Google's servers.
+The fakes are env-tunable (force no-fill, show-failures, consent prompts,
+privacy-options requirements, ATT outcomes, Game Center sign-out) — each module
+documents its knobs. An explicit `UmpTestConfig` makes geography testing
+deterministic only while `AdmobConfig::use_test_ads` is enabled; production
+configurations ignore its geography and reset fields. Simulators are test
+devices automatically. For a physical device, include UMP's logged hashed test
+device id in `AdmobConfig::test_device_ids`. On-device behaviour must still be
+validated in Xcode with the SDKs linked.
 
 ## Compatibility
 
 | `bevy_ios_toolkit` | `bevy` | iOS | AdMob SDK |
 |--------------------|--------|-----|-----------|
-| 0.3                | 0.19   | 16+ | 12.x (+ UMP 2.x) |
+| 0.3                | 0.19   | 16+ | 12.3–12.x (+ UMP 3.x) |
 
 ## Authorship
 

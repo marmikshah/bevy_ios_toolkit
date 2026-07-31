@@ -4,16 +4,22 @@
 //! 1. Insert [`AdmobConfig`] with your per-format ad unit ids (or
 //!    [`AdmobConfig::test_ads`] to use Google's official sample units). The
 //!    plugin calls into the backend once to start the Mobile Ads SDK.
-//! 2. Send [`LoadAd`] to preload a full-screen format; read [`AdInventory`] —
+//! 2. Wait until [`AdmobState::consent`] reports
+//!    [`ConsentStatus::can_request_ads`], presenting [`RequestConsent`] first
+//!    when required.
+//! 3. Send [`LoadAd`] to preload a full-screen format; read [`AdInventory`] —
 //!    `is_loaded(format)` — to know when it's ready to present.
-//! 3. Send [`ShowAd`] to present it, or [`ShowBanner`] / [`HideBanner`] for the
+//! 4. Send [`ShowAd`] to present it, or [`ShowBanner`] / [`HideBanner`] for the
 //!    banner.
-//! 4. React to [`AdLoaded`] / [`AdLoadFailed`] / [`AdShown`] / [`AdDismissed`] /
+//! 5. React to [`AdLoaded`] / [`AdLoadFailed`] / [`AdShown`] / [`AdDismissed`] /
 //!    [`AdShowFailed`] / [`RewardEarned`] / [`AdClicked`].
 //!
 //! Consent: read [`AdmobState::consent`]; send [`RequestConsent`] to present the
-//! UMP form when required. AdMob requires a valid consent state before serving
-//! personalized ads in the EEA/UK.
+//! initial UMP form when required. If the [`PrivacyOptionsRequirement`]
+//! resource is [`PrivacyOptionsRequirement::Required`], keep a visible action
+//! that sends [`PresentPrivacyOptions`] so the user can revisit their choices.
+//! AdMob requires a valid consent state before serving personalized ads in
+//! regulated regions.
 //!
 //! # Desktop fake (non-iOS)
 //!
@@ -25,6 +31,8 @@
 //!   reward granted by rewarded formats (default `1` / `Reward`).
 //! - `BEVY_ADMOB_FAKE_CONSENT=required` — consent starts `Required` instead of
 //!   `Obtained`; a [`RequestConsent`] then resolves it to `Obtained`.
+//! - `BEVY_ADMOB_FAKE_PRIVACY_OPTIONS=required` — the privacy-options entry
+//!   point is required for the session.
 
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -182,9 +190,57 @@ impl ConsentStatus {
         }
     }
 
-    /// Whether it's safe to request ads (anything but an outstanding requirement).
+    /// Whether consent has resolved far enough to request ads.
+    ///
+    /// `Unknown` is not ready: wait for the current consent-info refresh to
+    /// resolve before loading ads.
     pub fn can_request_ads(self) -> bool {
-        !matches!(self, ConsentStatus::Required)
+        matches!(self, Self::NotRequired | Self::Obtained)
+    }
+}
+
+/// Whether UMP requires a visible privacy-options entry point.
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum PrivacyOptionsRequirement {
+    /// The consent-info refresh has not completed.
+    #[default]
+    Unknown,
+    /// Keep a visible action that sends [`PresentPrivacyOptions`].
+    Required,
+    /// No privacy-options entry point is required for this user.
+    NotRequired,
+}
+
+impl PrivacyOptionsRequirement {
+    fn from_i32(v: i32) -> Self {
+        match v {
+            1 => Self::Required,
+            2 => Self::NotRequired,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+/// Test-only geography override for UMP consent flows.
+///
+/// The backend ignores every value unless [`AdmobConfig::use_test_ads`] is true.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum UmpDebugGeography {
+    /// Simulate a user in the European Economic Area.
+    Eea,
+    /// Simulate a user in a regulated US state.
+    RegulatedUsState,
+    /// Simulate a geography where no regulation is in force.
+    Other,
+}
+
+impl UmpDebugGeography {
+    fn as_i32(self) -> i32 {
+        match self {
+            Self::Eea => 1,
+            Self::RegulatedUsState => 3,
+            Self::Other => 4,
+        }
     }
 }
 
@@ -235,6 +291,30 @@ impl AdmobConfig {
     }
 }
 
+/// Explicit UMP test overrides. Insert before [`AdsPlugin`] initializes.
+///
+/// Every override is ignored unless [`AdmobConfig::use_test_ads`] is true.
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct UmpTestConfig {
+    /// Optional geography presented to UMP's debug settings.
+    pub geography: Option<UmpDebugGeography>,
+    /// Clear UMP consent state before the first consent-info refresh.
+    pub reset_consent_on_start: bool,
+}
+
+impl UmpTestConfig {
+    fn wire_values(self, use_test_ads: bool) -> (i32, i32) {
+        if use_test_ads {
+            (
+                self.geography.map(UmpDebugGeography::as_i32).unwrap_or(0),
+                self.reset_consent_on_start as i32,
+            )
+        } else {
+            (0, 0)
+        }
+    }
+}
+
 /// Per-format readiness. Read `is_loaded(format)` before sending [`ShowAd`].
 #[derive(Resource, Default)]
 pub struct AdInventory {
@@ -272,8 +352,9 @@ pub struct AdmobState {
 
 // ---------- Messages (in) ----------
 
-/// Preload a full-screen ad of `format`. No-op for [`AdFormat::Banner`] (use
-/// [`ShowBanner`]).
+/// Preload a full-screen ad of `format` after
+/// [`ConsentStatus::can_request_ads`] is true. No-op for [`AdFormat::Banner`]
+/// (use [`ShowBanner`]).
 #[derive(Message, Clone, Debug)]
 pub struct LoadAd(pub AdFormat);
 
@@ -282,7 +363,8 @@ pub struct LoadAd(pub AdFormat);
 #[derive(Message, Clone, Debug)]
 pub struct ShowAd(pub AdFormat);
 
-/// Show (or move) the banner at `position`. Loads and displays in one step.
+/// Show (or move) the banner after [`ConsentStatus::can_request_ads`] is true.
+/// Loads and displays in one step.
 #[derive(Message, Clone, Debug, Default)]
 pub struct ShowBanner {
     pub position: BannerPosition,
@@ -295,6 +377,13 @@ pub struct HideBanner;
 /// Present the UMP consent form if one is required/available.
 #[derive(Message, Clone, Debug)]
 pub struct RequestConsent;
+
+/// Present the UMP privacy-options form in response to a visible user action.
+///
+/// Only send this while the [`PrivacyOptionsRequirement`] resource is
+/// [`PrivacyOptionsRequirement::Required`].
+#[derive(Message, Clone, Debug)]
+pub struct PresentPrivacyOptions;
 
 // ---------- Messages (out) ----------
 
@@ -359,11 +448,19 @@ pub(crate) struct AdEvent {
 
 // ---------- Safe backend wrappers ----------
 
-fn init(test_devices: &[String], use_test_ads: bool) {
-    let Ok(joined) = CString::new(test_devices.join(",")) else {
+fn init(config: &AdmobConfig, ump_test: UmpTestConfig) {
+    let Ok(joined) = CString::new(config.test_device_ids.join(",")) else {
         return;
     };
-    unsafe { backend::admob_init(joined.as_ptr(), use_test_ads as i32) };
+    let (debug_geography, reset_consent) = ump_test.wire_values(config.use_test_ads);
+    unsafe {
+        backend::admob_init_with_ump_test(
+            joined.as_ptr(),
+            config.use_test_ads as i32,
+            debug_geography,
+            reset_consent,
+        )
+    };
 }
 
 fn load(format: AdFormat, unit_id: &str) {
@@ -392,8 +489,18 @@ fn request_consent() {
     unsafe { backend::admob_request_consent() };
 }
 
+fn present_privacy_options() {
+    unsafe { backend::admob_present_privacy_options() };
+}
+
 fn consent_status() -> ConsentStatus {
     ConsentStatus::from_i32(unsafe { backend::admob_consent_status() })
+}
+
+fn privacy_options_requirement() -> PrivacyOptionsRequirement {
+    PrivacyOptionsRequirement::from_i32(unsafe {
+        backend::admob_privacy_options_requirement_status()
+    })
 }
 
 fn drain_events() -> Vec<AdEvent> {
@@ -415,12 +522,15 @@ impl Plugin for AdsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<AdInventory>()
             .init_resource::<AdmobState>()
+            .init_resource::<PrivacyOptionsRequirement>()
+            .init_resource::<UmpTestConfig>()
             .init_resource::<AdsPoll>()
             .add_message::<LoadAd>()
             .add_message::<ShowAd>()
             .add_message::<ShowBanner>()
             .add_message::<HideBanner>()
             .add_message::<RequestConsent>()
+            .add_message::<PresentPrivacyOptions>()
             .add_message::<AdLoaded>()
             .add_message::<AdLoadFailed>()
             .add_message::<AdShown>()
@@ -437,6 +547,7 @@ impl Plugin for AdsPlugin {
 /// tolerant — the config can land any time.
 fn init_once(
     config: Option<Res<AdmobConfig>>,
+    ump_test: Res<UmpTestConfig>,
     mut poll: ResMut<AdsPoll>,
     mut state: ResMut<AdmobState>,
 ) {
@@ -444,7 +555,7 @@ fn init_once(
         return;
     }
     if let Some(config) = config {
-        init(&config.test_device_ids, config.use_test_ads);
+        init(&config, *ump_test);
         poll.inited = true;
         state.initialized = true;
     }
@@ -462,6 +573,7 @@ fn pump_requests(
     mut banner_shows: MessageReader<ShowBanner>,
     mut banner_hides: MessageReader<HideBanner>,
     mut consents: MessageReader<RequestConsent>,
+    mut privacy_options: MessageReader<PresentPrivacyOptions>,
 ) {
     if !poll.inited {
         return;
@@ -493,6 +605,9 @@ fn pump_requests(
     for _ in consents.read() {
         request_consent();
     }
+    for _ in privacy_options.read() {
+        present_privacy_options();
+    }
 }
 
 /// Drain the backend's polled state into resources + messages.
@@ -501,6 +616,7 @@ fn poll_backend(
     mut poll: ResMut<AdsPoll>,
     mut inventory: ResMut<AdInventory>,
     mut state: ResMut<AdmobState>,
+    mut privacy_options_state: ResMut<PrivacyOptionsRequirement>,
     mut loaded: MessageWriter<AdLoaded>,
     mut load_failed: MessageWriter<AdLoadFailed>,
     mut shown: MessageWriter<AdShown>,
@@ -519,6 +635,10 @@ fn poll_backend(
         poll.consent = consent;
         state.consent = consent;
         consent_updated.write(ConsentUpdated(consent));
+    }
+    let privacy_options = privacy_options_requirement();
+    if privacy_options != *privacy_options_state {
+        *privacy_options_state = privacy_options;
     }
 
     for ev in drain_events() {
@@ -615,6 +735,7 @@ mod tests {
             "BEVY_ADMOB_FAKE_REWARD_AMOUNT",
             "BEVY_ADMOB_FAKE_REWARD_TYPE",
             "BEVY_ADMOB_FAKE_CONSENT",
+            "BEVY_ADMOB_FAKE_PRIVACY_OPTIONS",
         ] {
             unsafe { std::env::remove_var(key) };
         }
@@ -644,6 +765,20 @@ mod tests {
             test_cfg.resolve_unit(AdFormat::Interstitial),
             test_unit_id(AdFormat::Interstitial)
         );
+    }
+
+    #[test]
+    fn consent_debug_overrides_are_disabled_for_production_ads() {
+        let _guard = guarded();
+        let mut app = build_app();
+        app.insert_resource(AdmobConfig::default());
+        app.insert_resource(UmpTestConfig {
+            geography: Some(UmpDebugGeography::Eea),
+            reset_consent_on_start: true,
+        });
+        app.update();
+
+        assert_eq!(backend::ump_test_config(), (0, false));
     }
 
     /// Accumulates terminal outcomes across frames so assertions don't race the
@@ -806,8 +941,70 @@ mod tests {
             app.world().resource::<AdmobState>().consent,
             ConsentStatus::Obtained
         );
+        assert!(!ConsentStatus::Unknown.can_request_ads());
+        assert!(ConsentStatus::NotRequired.can_request_ads());
         assert!(ConsentStatus::Obtained.can_request_ads());
         assert!(!ConsentStatus::Required.can_request_ads());
+    }
+
+    #[test]
+    fn required_privacy_options_are_polled_and_presented_from_a_request() {
+        let _guard = guarded();
+        unsafe { std::env::set_var("BEVY_ADMOB_FAKE_PRIVACY_OPTIONS", "required") }
+
+        let mut app = build_app();
+        app.insert_resource(AdmobConfig::test_ads());
+        app.update();
+
+        assert_eq!(
+            *app.world().resource::<PrivacyOptionsRequirement>(),
+            PrivacyOptionsRequirement::Required
+        );
+        assert_eq!(backend::privacy_options_presentations(), 0);
+
+        app.world_mut()
+            .resource_mut::<Messages<PresentPrivacyOptions>>()
+            .write(PresentPrivacyOptions);
+        app.update();
+
+        assert_eq!(backend::privacy_options_presentations(), 1);
+        assert_eq!(
+            *app.world().resource::<PrivacyOptionsRequirement>(),
+            PrivacyOptionsRequirement::Required
+        );
+    }
+
+    #[test]
+    fn privacy_options_are_not_required_without_a_fake_override() {
+        let _guard = guarded();
+        let mut app = build_app();
+        app.insert_resource(AdmobConfig::test_ads());
+        app.update();
+
+        assert_eq!(
+            *app.world().resource::<PrivacyOptionsRequirement>(),
+            PrivacyOptionsRequirement::NotRequired
+        );
+    }
+
+    #[test]
+    fn every_debug_geography_and_reset_reach_the_backend_for_test_ads() {
+        let _guard = guarded();
+        for (geography, wire) in [
+            (UmpDebugGeography::Eea, 1),
+            (UmpDebugGeography::RegulatedUsState, 3),
+            (UmpDebugGeography::Other, 4),
+        ] {
+            backend::reset();
+            let mut app = build_app();
+            app.insert_resource(AdmobConfig::test_ads());
+            app.insert_resource(UmpTestConfig {
+                geography: Some(geography),
+                reset_consent_on_start: true,
+            });
+            app.update();
+            assert_eq!(backend::ump_test_config(), (wire, true));
+        }
     }
 
     #[test]

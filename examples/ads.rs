@@ -18,10 +18,10 @@ fn main() {
         .add_plugins((MinimalPlugins, IosPlugin))
         // `test_ads()` serves Google's official sample units — zero setup.
         .insert_resource(AdmobConfig::test_ads())
-        .add_systems(Startup, kick_off)
         .add_systems(
             Update,
             (
+                kick_off_when_consent_resolved,
                 show_when_ready,
                 report_loaded.run_if(on_message::<AdLoaded>),
                 report_load_failed.run_if(on_message::<AdLoadFailed>),
@@ -37,8 +37,17 @@ fn main() {
         .run();
 }
 
-/// Show a banner and start preloading the full-screen formats up front.
-fn kick_off(mut loads: MessageWriter<LoadAd>, mut banner: MessageWriter<ShowBanner>) {
+/// Show a banner and preload only after the current UMP state permits requests.
+fn kick_off_when_consent_resolved(
+    state: Res<AdmobState>,
+    mut loads: MessageWriter<LoadAd>,
+    mut banner: MessageWriter<ShowBanner>,
+    mut started: Local<bool>,
+) {
+    if *started || !state.consent.can_request_ads() {
+        return;
+    }
+    *started = true;
     banner.write(ShowBanner {
         position: BannerPosition::Bottom,
     });

@@ -25,11 +25,14 @@ let package = Package(
         .library(name: "Review", targets: ["Review"]),
     ],
     dependencies: [
-        // Pulls in the UMP consent SDK transitively. Do NOT add a standalone
-        // UserMessagingPlatform package — it collides on product naming.
         .package(
             url: "https://github.com/googleads/swift-package-manager-google-mobile-ads",
-            from: "12.0.0"
+            from: "12.3.0"
+        ),
+        // GMA 12.3 permits UMP 2 or 3, while this bridge uses UMP 3 APIs.
+        .package(
+            url: "https://github.com/googleads/swift-package-manager-google-user-messaging-platform.git",
+            from: "3.0.0"
         ),
     ],
     targets: [
@@ -47,6 +50,10 @@ let package = Package(
                 .product(
                     name: "GoogleMobileAds",
                     package: "swift-package-manager-google-mobile-ads"
+                ),
+                .product(
+                    name: "GoogleUserMessagingPlatform",
+                    package: "swift-package-manager-google-user-messaging-platform"
                 ),
             ],
             linkerSettings: [.linkedFramework("UIKit")]
