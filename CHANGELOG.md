@@ -5,7 +5,16 @@ format loosely [Keep a Changelog](https://keepachangelog.com). Entries begin
 from the point this file was added — earlier releases live in the crates.io
 version history and the git log.
 
-## Unreleased
+## 0.3.2 — 2026-07-31
+
+### Added
+- Expose UMP's privacy-options requirement as a polled Bevy resource and present
+  the privacy-options form through an explicit message from visible UI.
+- Add test-ad-gated UMP geography and consent-reset configuration, with
+  independently controllable desktop consent and privacy-options fakes.
+
+### Fixed
+- Treat unknown UMP consent as unresolved when deciding whether ads may load.
 
 ## 0.3.1 — 2026-07-28
 

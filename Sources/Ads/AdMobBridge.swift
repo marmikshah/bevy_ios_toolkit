@@ -21,6 +21,8 @@
 //      `SKAdNetworkItems` Google ships for attribution.
 //   3. Insert AdmobConfig with your ad unit ids. Symbol prefix `admob_` won't
 //      collide with the game's own bridge.
+//   4. Keep a visible privacy-options action whenever the polled requirement
+//      status is 1, and present the form directly from the user's interaction.
 //
 // All shared state (the event queue + cached consent status) lives behind an
 // OSAllocatedUnfairLock so the async SDK callbacks and the synchronous C-ABI
@@ -50,6 +52,7 @@ import UserMessagingPlatform
 private struct AdMobSharedState {
     var events: [[String: Any]] = []
     var consentStatus: Int32 = 0          // 0 unknown,1 required,2 not-required,3 obtained
+    var privacyOptionsRequirement: Int32 = 0 // 0 unknown,1 required,2 not-required
     var eventsJSONPtr: UnsafeMutablePointer<CChar>?
 }
 
@@ -66,6 +69,8 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     @MainActor private var banner: BannerView?
     @MainActor private var fullScreenDelegates: [AdFormat: FullScreenPresenter] = [:]
     @MainActor private var bannerDelegate: BannerObserver?
+    @MainActor private var consentDebugGeography: Int32 = 0
+    @MainActor private var consentTestDevices: [String] = []
 
     // MARK: Event queue (thread-safe)
 
@@ -84,7 +89,14 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
         shared_.withLock { $0.consentStatus = value }
     }
 
+    private func setPrivacyOptionsRequirement(_ value: Int32) {
+        shared_.withLock { $0.privacyOptionsRequirement = value }
+    }
+
     func consentStatusValue() -> Int32 { shared_.withLock { $0.consentStatus } }
+    func privacyOptionsRequirementValue() -> Int32 {
+        shared_.withLock { $0.privacyOptionsRequirement }
+    }
 
     func drainEvents() -> UnsafePointer<CChar>? {
         shared_.withLockUnchecked { s in
@@ -100,10 +112,22 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     // MARK: Lifecycle
 
     @MainActor
-    func start(testDevices: [String]) {
+    func start(
+        testDevices: [String],
+        useTestAds: Bool,
+        consentDebugGeography: Int32,
+        resetConsent: Bool
+    ) {
         if !testDevices.isEmpty {
             MobileAds.shared.requestConfiguration.testDeviceIdentifiers = testDevices
         }
+        self.consentDebugGeography = useTestAds ? consentDebugGeography : 0
+        self.consentTestDevices = useTestAds ? testDevices : []
+        #if canImport(UserMessagingPlatform)
+        if useTestAds && resetConsent {
+            ConsentInformation.shared.reset()
+        }
+        #endif
         MobileAds.shared.start(completionHandler: nil)
         refreshConsentInfo(present: false)
     }
@@ -114,13 +138,30 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     func requestConsent() { refreshConsentInfo(present: true) }
 
     @MainActor
+    func presentPrivacyOptions() {
+        #if canImport(UserMessagingPlatform)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await ConsentForm.presentPrivacyOptionsForm(
+                    from: self.rootViewController()
+                )
+            } catch {
+                NSLog("[admob] privacy options form failed: %@", String(describing: error))
+            }
+            self.cacheConsentStatus()
+        }
+        #endif
+    }
+
+    @MainActor
     private func refreshConsentInfo(present: Bool) {
         #if canImport(UserMessagingPlatform)
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 try await ConsentInformation.shared
-                    .requestConsentInfoUpdate(with: RequestParameters())
+                    .requestConsentInfoUpdate(with: self.consentRequestParameters())
             } catch {
                 NSLog("[admob] consent info update failed: %@", String(describing: error))
             }
@@ -136,7 +177,27 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
         }
         #else
         setConsentStatus(3) // no UMP: treat as obtained
+        setPrivacyOptionsRequirement(2)
         #endif
+    }
+
+    @MainActor
+    private func consentRequestParameters() -> RequestParameters {
+        let parameters = RequestParameters()
+        guard consentDebugGeography != 0 || !consentTestDevices.isEmpty else {
+            return parameters
+        }
+
+        let debug = DebugSettings()
+        debug.testDeviceIdentifiers = consentTestDevices
+        switch consentDebugGeography {
+        case 1: debug.geography = .EEA
+        case 3: debug.geography = .regulatedUSState
+        case 4: debug.geography = .other
+        default: debug.geography = .disabled
+        }
+        parameters.debugSettings = debug
+        return parameters
     }
 
     @MainActor
@@ -147,9 +208,18 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
         case .required: value = 1
         case .notRequired: value = 2
         case .obtained: value = 3
-        default: value = 0
+        case .unknown: value = 0
+        @unknown default: value = 0
         }
         setConsentStatus(value)
+        let privacyOptions: Int32
+        switch ConsentInformation.shared.privacyOptionsRequirementStatus {
+        case .required: privacyOptions = 1
+        case .notRequired: privacyOptions = 2
+        case .unknown: privacyOptions = 0
+        @unknown default: privacyOptions = 0
+        }
+        setPrivacyOptionsRequirement(privacyOptions)
         #endif
     }
 
@@ -331,11 +401,28 @@ private final class BannerObserver: NSObject, BannerViewDelegate {
 
 @_cdecl("admob_init")
 public func admob_init(_ testDevices: UnsafePointer<CChar>, _ useTestAds: Int32) {
+    admob_init_with_ump_test(testDevices, useTestAds, 0, 0)
+}
+
+@_cdecl("admob_init_with_ump_test")
+public func admob_init_with_ump_test(
+    _ testDevices: UnsafePointer<CChar>,
+    _ useTestAds: Int32,
+    _ consentDebugGeography: Int32,
+    _ resetConsent: Int32
+) {
     let list = String(cString: testDevices)
         .split(separator: ",")
         .map { $0.trimmingCharacters(in: .whitespaces) }
         .filter { !$0.isEmpty }
-    Task { @MainActor in AdMobBridge.shared.start(testDevices: list) }
+    Task { @MainActor in
+        AdMobBridge.shared.start(
+            testDevices: list,
+            useTestAds: useTestAds != 0,
+            consentDebugGeography: consentDebugGeography,
+            resetConsent: resetConsent != 0
+        )
+    }
 }
 
 @_cdecl("admob_load")
@@ -367,8 +454,18 @@ public func admob_request_consent() {
     Task { @MainActor in AdMobBridge.shared.requestConsent() }
 }
 
+@_cdecl("admob_present_privacy_options")
+public func admob_present_privacy_options() {
+    Task { @MainActor in AdMobBridge.shared.presentPrivacyOptions() }
+}
+
 @_cdecl("admob_consent_status")
 public func admob_consent_status() -> Int32 { AdMobBridge.shared.consentStatusValue() }
+
+@_cdecl("admob_privacy_options_requirement_status")
+public func admob_privacy_options_requirement_status() -> Int32 {
+    AdMobBridge.shared.privacyOptionsRequirementValue()
+}
 
 @_cdecl("admob_drain_events")
 public func admob_drain_events() -> UnsafePointer<CChar>? { AdMobBridge.shared.drainEvents() }
@@ -376,13 +473,24 @@ public func admob_drain_events() -> UnsafePointer<CChar>? { AdMobBridge.shared.d
 #else
 // GoogleMobileAds unavailable: linking stubs. Nothing loads; consent obtained.
 
-@_cdecl("admob_init") public func admob_init(_ testDevices: UnsafePointer<CChar>, _ useTestAds: Int32) {}
+@_cdecl("admob_init")
+public func admob_init(_ testDevices: UnsafePointer<CChar>, _ useTestAds: Int32) {}
+@_cdecl("admob_init_with_ump_test")
+public func admob_init_with_ump_test(
+    _ testDevices: UnsafePointer<CChar>,
+    _ useTestAds: Int32,
+    _ consentDebugGeography: Int32,
+    _ resetConsent: Int32
+) {}
 @_cdecl("admob_load") public func admob_load(_ format: Int32, _ unitID: UnsafePointer<CChar>) {}
 @_cdecl("admob_show") public func admob_show(_ format: Int32) {}
 @_cdecl("admob_banner_show") public func admob_banner_show(_ unitID: UnsafePointer<CChar>, _ position: Int32) {}
 @_cdecl("admob_banner_hide") public func admob_banner_hide() {}
 @_cdecl("admob_request_consent") public func admob_request_consent() {}
+@_cdecl("admob_present_privacy_options") public func admob_present_privacy_options() {}
 @_cdecl("admob_consent_status") public func admob_consent_status() -> Int32 { 3 }
+@_cdecl("admob_privacy_options_requirement_status")
+public func admob_privacy_options_requirement_status() -> Int32 { 2 }
 @_cdecl("admob_drain_events") public func admob_drain_events() -> UnsafePointer<CChar>? { nil }
 
 #endif

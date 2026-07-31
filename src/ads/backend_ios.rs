@@ -13,7 +13,12 @@ unsafe extern "C" {
     /// Start the Mobile Ads SDK. `test_devices` is a comma-separated list of
     /// test device ids; `use_test_ads` is a bool (0/1) the app may use to log
     /// or branch. Also kicks off a UMP consent-info refresh.
-    pub fn admob_init(test_devices: *const c_char, use_test_ads: i32);
+    pub fn admob_init_with_ump_test(
+        test_devices: *const c_char,
+        use_test_ads: i32,
+        consent_debug_geography: i32,
+        reset_consent: i32,
+    );
     /// Begin loading a full-screen ad of `format` from `unit_id` (async; result
     /// surfaces as a `loaded` / `load_failed` event).
     pub fn admob_load(format: i32, unit_id: *const c_char);
@@ -25,8 +30,12 @@ unsafe extern "C" {
     pub fn admob_banner_hide();
     /// Load and present the UMP consent form if one is required/available.
     pub fn admob_request_consent();
+    /// Present the UMP privacy-options form in response to a user action.
+    pub fn admob_present_privacy_options();
     /// 0 unknown, 1 required, 2 not-required, 3 obtained.
     pub fn admob_consent_status() -> i32;
+    /// 0 unknown, 1 required, 2 not-required.
+    pub fn admob_privacy_options_requirement_status() -> i32;
     /// JSON array of pending events, draining the queue. Each element is
     /// `{format, kind, error?, reward_amount?, reward_type?}` where `kind` is
     /// one of `loaded | load_failed | shown | dismissed | show_failed | reward

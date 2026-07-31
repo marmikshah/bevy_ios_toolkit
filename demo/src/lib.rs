@@ -58,9 +58,11 @@ pub fn run() {
         .add_systems(
             Update,
             (
-                on_button_press,
+                on_store_ads_button_press,
+                on_platform_button_press,
                 drive_pending,
                 restyle_buttons,
+                sync_privacy_options_button,
                 update_status,
             ),
         )
@@ -75,6 +77,7 @@ enum Action {
     Rewarded,
     ToggleBanner,
     Consent,
+    PrivacyOptions,
     Tracking,
     Haptic,
     Share,
@@ -88,6 +91,7 @@ const ROWS: &[(&str, Action)] = &[
     ("Rewarded Ad", Action::Rewarded),
     ("Toggle Banner", Action::ToggleBanner),
     ("Request Ad Consent", Action::Consent),
+    ("Privacy Options", Action::PrivacyOptions),
     ("Request Tracking (ATT)", Action::Tracking),
     ("Haptic Tap", Action::Haptic),
     ("Share Result", Action::Share),
@@ -101,6 +105,9 @@ struct PendingShow(std::collections::HashSet<AdFormat>);
 
 #[derive(Component)]
 struct StatusLine;
+
+#[derive(Component)]
+struct PrivacyOptionsButton;
 
 fn setup(mut commands: Commands) {
     commands.spawn(Camera2d);
@@ -129,19 +136,27 @@ fn setup(mut commands: Commands) {
                 },
             ));
             for (label, action) in ROWS {
-                root.spawn((
+                let mut button = root.spawn((
                     *action,
                     Button,
                     Node {
                         width: Val::Px(320.0),
+                        display: if *action == Action::PrivacyOptions {
+                            Display::None
+                        } else {
+                            Display::Flex
+                        },
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         padding: UiRect::axes(Val::Px(16.0), Val::Px(10.0)),
                         ..default()
                     },
                     BackgroundColor(REST),
-                ))
-                .with_children(|b| {
+                ));
+                if *action == Action::PrivacyOptions {
+                    button.insert(PrivacyOptionsButton);
+                }
+                button.with_children(|b| {
                     b.spawn((
                         Text::new(*label),
                         TextFont {
@@ -172,13 +187,13 @@ fn restyle_buttons(
     }
 }
 
-/// Fan a button press out to the matching toolkit message / call.
+/// Fan store and ad button presses out to the matching toolkit message.
 #[allow(clippy::too_many_arguments)]
-fn on_button_press(
+fn on_store_ads_button_press(
     buttons: Query<(&Interaction, &Action), Changed<Interaction>>,
     admob: Res<AdmobState>,
+    privacy_options_requirement: Res<PrivacyOptionsRequirement>,
     inventory: Res<AdInventory>,
-    gc: Res<GameCenter>,
     mut pending: ResMut<PendingShow>,
     mut purchase: MessageWriter<PurchaseRequest>,
     mut load: MessageWriter<LoadAd>,
@@ -186,6 +201,57 @@ fn on_button_press(
     mut show_banner: MessageWriter<ShowBanner>,
     mut hide_banner: MessageWriter<HideBanner>,
     mut consent: MessageWriter<RequestConsent>,
+    mut privacy_options: MessageWriter<PresentPrivacyOptions>,
+) {
+    for (interaction, action) in buttons.iter() {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        match action {
+            Action::Purchase => {
+                purchase.write(PurchaseRequest(REMOVE_ADS.into()));
+            }
+            Action::Interstitial if admob.consent.can_request_ads() => queue_ad(
+                AdFormat::Interstitial,
+                &inventory,
+                &mut pending,
+                &mut load,
+                &mut show,
+            ),
+            Action::Rewarded if admob.consent.can_request_ads() => queue_ad(
+                AdFormat::Rewarded,
+                &inventory,
+                &mut pending,
+                &mut load,
+                &mut show,
+            ),
+            Action::ToggleBanner if admob.consent.can_request_ads() => {
+                if admob.banner_visible {
+                    hide_banner.write(HideBanner);
+                } else {
+                    show_banner.write(ShowBanner::default());
+                }
+            }
+            Action::Consent => {
+                consent.write(RequestConsent);
+            }
+            Action::PrivacyOptions
+                if *privacy_options_requirement == PrivacyOptionsRequirement::Required =>
+            {
+                privacy_options.write(PresentPrivacyOptions);
+            }
+            Action::PrivacyOptions => {}
+            _ => {}
+        }
+    }
+}
+
+/// Fan platform and Game Center presses out separately so this remains a valid
+/// Bevy system as integrations are added to the demo.
+#[allow(clippy::too_many_arguments)]
+fn on_platform_button_press(
+    buttons: Query<(&Interaction, &Action), Changed<Interaction>>,
+    gc: Res<GameCenter>,
     mut att: MessageWriter<RequestTracking>,
     mut auth: MessageWriter<AuthenticateGameCenter>,
     mut submit: MessageWriter<SubmitScore>,
@@ -197,33 +263,6 @@ fn on_button_press(
             continue;
         }
         match action {
-            Action::Purchase => {
-                purchase.write(PurchaseRequest(REMOVE_ADS.into()));
-            }
-            Action::Interstitial => queue_ad(
-                AdFormat::Interstitial,
-                &inventory,
-                &mut pending,
-                &mut load,
-                &mut show,
-            ),
-            Action::Rewarded => queue_ad(
-                AdFormat::Rewarded,
-                &inventory,
-                &mut pending,
-                &mut load,
-                &mut show,
-            ),
-            Action::ToggleBanner => {
-                if admob.banner_visible {
-                    hide_banner.write(HideBanner);
-                } else {
-                    show_banner.write(ShowBanner::default());
-                }
-            }
-            Action::Consent => {
-                consent.write(RequestConsent);
-            }
             Action::Tracking => {
                 att.write(RequestTracking);
             }
@@ -253,7 +292,25 @@ fn on_button_press(
                     auth.write(AuthenticateGameCenter);
                 }
             }
+            _ => {}
         }
+    }
+}
+
+fn sync_privacy_options_button(
+    requirement: Res<PrivacyOptionsRequirement>,
+    mut buttons: Query<&mut Node, With<PrivacyOptionsButton>>,
+) {
+    if !requirement.is_changed() {
+        return;
+    }
+    let display = if *requirement == PrivacyOptionsRequirement::Required {
+        Display::Flex
+    } else {
+        Display::None
+    };
+    for mut node in &mut buttons {
+        node.display = display;
     }
 }
 
@@ -291,11 +348,13 @@ fn drive_pending(
 }
 
 /// Reflect live state from the toolkit's resources into the status line.
+#[allow(clippy::too_many_arguments)]
 fn update_status(
     mut status: Query<&mut Text, With<StatusLine>>,
     entitlements: Res<Entitlements>,
     inventory: Res<AdInventory>,
     admob: Res<AdmobState>,
+    privacy_options: Res<PrivacyOptionsRequirement>,
     att: Res<TrackingStatus>,
     gc: Res<GameCenter>,
     power: Res<PowerState>,
@@ -305,13 +364,18 @@ fn update_status(
     };
     let owns = entitlements.owns(REMOVE_ADS);
     text.0 = format!(
-        "ads-removed: {owns} | interstitial: {:?} | banner: {} | consent: {:?} | att: {:?} | gc: {:?} | thermal: {:?}{}",
+        "ads-removed: {owns} | interstitial: {:?} | banner: {} | consent: {:?} | privacy: {:?} | att: {:?} | gc: {:?} | thermal: {:?}{}",
         inventory.state(AdFormat::Interstitial),
         admob.banner_visible,
         admob.consent,
+        *privacy_options,
         *att,
         gc.auth,
         power.thermal,
-        if power.low_power_mode { " (low power)" } else { "" },
+        if power.low_power_mode {
+            " (low power)"
+        } else {
+            ""
+        },
     );
 }

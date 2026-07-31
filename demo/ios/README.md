@@ -4,7 +4,7 @@ The native wrapper that turns the `bevy_ios_toolkit_demo` Rust staticlib into a
 real iOS app, so each toolkit feature can be tried on a device or simulator.
 
 > **⚠️ Two one-time manual steps are required before the iOS app works** — see
-> "Manual setup" below. (Desktop — `make run` — needs neither.)
+> "Manual setup" below. The desktop fake needs neither.
 
 ## Manual setup (required)
 
@@ -14,7 +14,7 @@ Two things only you can provide; the demo can't ship them for you.
 empty by default, so the build fails with a code-signing error (*"Signing for
 'IosToolkitDemo' requires a development team"*) — including on the Simulator,
 because the Game Center entitlement forces signing. Set `DEVELOPMENT_TEAM` to
-your team id in `project.yml` and re-run `make xcodeproj` (or pass
+your team id in `project.yml`, regenerate with `xcodegen generate` (or pass
 `DEVELOPMENT_TEAM=XXXXXXXXXX` to `xcodebuild`). You'll likely also change
 `PRODUCT_BUNDLE_IDENTIFIER` to a bundle id your team owns.
 
@@ -55,12 +55,25 @@ Center *sign-in* works as-is; submitting to `lb.demo.highscore` /
 
 ## Run
 
-From the demo crate root (`bevy_ios_toolkit/demo/`):
+From the repository root:
 
 ```bash
-make run         # desktop, against the fakes — no Xcode needed
-make xcode       # generate the project and open it in Xcode (pick a device, Run)
-make simulator   # build + install + launch on a booted Simulator
+cargo run --manifest-path demo/Cargo.toml --bin demo
+cd demo/ios
+xcodegen generate
+open IosToolkitDemo.xcodeproj
+```
+
+Pick a device or Simulator in Xcode and run the generated `IosToolkitDemo`
+scheme. For an unsigned command-line Simulator build, use:
+
+```bash
+xcodebuild -project IosToolkitDemo.xcodeproj \
+  -scheme IosToolkitDemo \
+  -configuration Debug \
+  -destination 'generic/platform=iOS Simulator' \
+  CODE_SIGNING_ALLOWED=NO \
+  build
 ```
 
 ## What the buttons do
@@ -72,6 +85,7 @@ One button per feature; the status line at the top reflects live state
 - **Interstitial Ad** / **Rewarded Ad** — load *and* present from one tap.
 - **Toggle Banner** — show / hide the banner.
 - **Request Ad Consent** — UMP consent form.
+- **Privacy Options** — reopens UMP choices when the SDK requires the entry point.
 - **Request Tracking (ATT)** — the App Tracking Transparency prompt.
 - **Haptic Tap** / **Ask for Review** — impact haptic / review prompt.
 - **Game Center** — first tap signs in; once signed in, a tap submits a score +
