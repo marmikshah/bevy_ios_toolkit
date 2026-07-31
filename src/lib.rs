@@ -81,10 +81,10 @@ pub mod prelude {
     #[cfg(feature = "ads")]
     pub use crate::ads::{
         AdClicked, AdDismissed, AdFormat, AdInventory, AdLoadFailed, AdLoadState, AdLoaded,
-        AdShowFailed, AdShown, AdmobConfig, AdmobState, BannerPosition, ConsentStatus,
-        ConsentUpdated, HideBanner, LoadAd, PresentPrivacyOptions, PrivacyOptionsRequirement,
-        RequestConsent, RewardEarned, ShowAd, ShowBanner, TEST_APP_ID, UmpDebugGeography,
-        UmpTestConfig,
+        AdShowFailed, AdShown, AdmobConfig, AdmobState, BannerPosition, ConsentInfoUpdateFailed,
+        ConsentStatus, ConsentUpdated, HideBanner, LoadAd, PresentPrivacyOptions,
+        PrivacyOptionsRequirement, RequestConsent, RewardEarned, ShowAd, ShowBanner, TEST_APP_ID,
+        UmpDebugGeography, UmpTestConfig,
     };
 
     #[cfg(feature = "platform")]

@@ -66,6 +66,12 @@ fn show(inv: Res<AdInventory>, mut shows: MessageWriter<ShowAd>) {
     }
 }
 
+// UMP owns the authoritative readiness decision. Do not infer it from the
+// coarse consent status; cached consent may remain usable after an update error.
+fn ads_ready(admob: Res<AdmobState>) {
+    if admob.can_request_ads { /* ad requests are permitted */ }
+}
+
 // Gate features on ownership (covers purchase, restore, relaunch).
 fn gate(entitlements: Res<Entitlements>) {
     if entitlements.owns("com.example.app.removeads") { /* hide ads */ }

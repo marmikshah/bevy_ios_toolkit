@@ -30,6 +30,7 @@ fn main() {
                 report_show_failed.run_if(on_message::<AdShowFailed>),
                 report_reward.run_if(on_message::<RewardEarned>),
                 report_consent.run_if(on_message::<ConsentUpdated>),
+                report_consent_failure.run_if(on_message::<ConsentInfoUpdateFailed>),
                 resolve_consent.run_if(on_message::<ConsentUpdated>),
                 exit_after_settling,
             ),
@@ -44,7 +45,7 @@ fn kick_off_when_consent_resolved(
     mut banner: MessageWriter<ShowBanner>,
     mut started: Local<bool>,
 ) {
-    if *started || !state.consent.can_request_ads() {
+    if *started || !state.can_request_ads {
         return;
     }
     *started = true;
@@ -116,6 +117,12 @@ fn report_reward(mut rewards: MessageReader<RewardEarned>) {
 fn report_consent(mut updated: MessageReader<ConsentUpdated>) {
     for ConsentUpdated(status) in updated.read() {
         println!("consent: {status:?}");
+    }
+}
+
+fn report_consent_failure(mut failures: MessageReader<ConsentInfoUpdateFailed>) {
+    for failure in failures.read() {
+        eprintln!("consent info update failed: {}", failure.error);
     }
 }
 
