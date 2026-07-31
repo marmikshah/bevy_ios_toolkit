@@ -1,5 +1,5 @@
-# Release. Pushing a v* tag from clean master (via `make release`)
-# publishes the crate to crates.io. The token lives in the `production`
+# Release. Pushing a v* tag from clean master publishes the crate to crates.io.
+# The token lives in the `production`
 # environment secret CRATES_API_TOKEN, scoped to this workflow only.
 name: Release
 
