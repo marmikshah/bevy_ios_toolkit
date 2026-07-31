@@ -5,6 +5,17 @@ format loosely [Keep a Changelog](https://keepachangelog.com). Entries begin
 from the point this file was added — earlier releases live in the crates.io
 version history and the git log.
 
+## 0.3.3 — 2026-08-01
+
+### Added
+- Expose UMP's authoritative `canRequestAds` result as
+  `AdmobState::can_request_ads` and surface consent-info update failures as
+  `ConsentInfoUpdateFailed` messages.
+
+### Fixed
+- Preserve ad readiness from cached consent when the current UMP consent-info
+  refresh fails or its coarse consent status remains unknown.
+
 ## 0.3.2 — 2026-07-31
 
 ### Added
