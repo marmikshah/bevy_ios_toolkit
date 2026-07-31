@@ -4,9 +4,8 @@
 //! 1. Insert [`AdmobConfig`] with your per-format ad unit ids (or
 //!    [`AdmobConfig::test_ads`] to use Google's official sample units). The
 //!    plugin calls into the backend once to start the Mobile Ads SDK.
-//! 2. Wait until [`AdmobState::consent`] reports
-//!    [`ConsentStatus::can_request_ads`], presenting [`RequestConsent`] first
-//!    when required.
+//! 2. Wait until [`AdmobState::can_request_ads`] is true, presenting
+//!    [`RequestConsent`] first when consent is required.
 //! 3. Send [`LoadAd`] to preload a full-screen format; read [`AdInventory`] —
 //!    `is_loaded(format)` — to know when it's ready to present.
 //! 4. Send [`ShowAd`] to present it, or [`ShowBanner`] / [`HideBanner`] for the
@@ -31,6 +30,10 @@
 //!   reward granted by rewarded formats (default `1` / `Reward`).
 //! - `BEVY_ADMOB_FAKE_CONSENT=required` — consent starts `Required` instead of
 //!   `Obtained`; a [`RequestConsent`] then resolves it to `Obtained`.
+//! - `BEVY_ADMOB_FAKE_CAN_REQUEST_ADS=true` — override authoritative UMP ad
+//!   readiness independently of its coarse consent status.
+//! - `BEVY_ADMOB_FAKE_CONSENT_UPDATE=failed|fail_once` — surface a persistent
+//!   or one-shot [`ConsentInfoUpdateFailed`].
 //! - `BEVY_ADMOB_FAKE_PRIVACY_OPTIONS=required` — the privacy-options entry
 //!   point is required for the session.
 
@@ -190,10 +193,12 @@ impl ConsentStatus {
         }
     }
 
-    /// Whether consent has resolved far enough to request ads.
+    /// A coarse fallback retained for source compatibility.
     ///
-    /// `Unknown` is not ready: wait for the current consent-info refresh to
-    /// resolve before loading ads.
+    /// UMP's authoritative readiness is [`AdmobState::can_request_ads`]. The
+    /// native SDK can permit ads from cached consent even when this status is
+    /// `Unknown`, including after an update error.
+    #[deprecated(since = "0.3.3", note = "use AdmobState::can_request_ads")]
     pub fn can_request_ads(self) -> bool {
         matches!(self, Self::NotRequired | Self::Obtained)
     }
@@ -346,6 +351,12 @@ pub struct AdmobState {
     pub initialized: bool,
     /// Current UMP consent state.
     pub consent: ConsentStatus,
+    /// UMP's authoritative answer for whether ads may be requested.
+    ///
+    /// This is intentionally not inferred from [`Self::consent`]. Google may
+    /// preserve usable consent from a previous session when the current
+    /// consent-info update fails.
+    pub can_request_ads: bool,
     /// Whether a banner is currently on screen.
     pub banner_visible: bool,
 }
@@ -353,7 +364,7 @@ pub struct AdmobState {
 // ---------- Messages (in) ----------
 
 /// Preload a full-screen ad of `format` after
-/// [`ConsentStatus::can_request_ads`] is true. No-op for [`AdFormat::Banner`]
+/// [`AdmobState::can_request_ads`] is true. No-op for [`AdFormat::Banner`]
 /// (use [`ShowBanner`]).
 #[derive(Message, Clone, Debug)]
 pub struct LoadAd(pub AdFormat);
@@ -363,7 +374,7 @@ pub struct LoadAd(pub AdFormat);
 #[derive(Message, Clone, Debug)]
 pub struct ShowAd(pub AdFormat);
 
-/// Show (or move) the banner after [`ConsentStatus::can_request_ads`] is true.
+/// Show (or move) the banner after [`AdmobState::can_request_ads`] is true.
 /// Loads and displays in one step.
 #[derive(Message, Clone, Debug, Default)]
 pub struct ShowBanner {
@@ -429,6 +440,16 @@ pub struct AdClicked(pub AdFormat);
 /// The consent state changed; read [`AdmobState::consent`] for the new value.
 #[derive(Message, Clone, Debug)]
 pub struct ConsentUpdated(pub ConsentStatus);
+
+/// The latest UMP consent-info update failed.
+///
+/// Read [`AdmobState::can_request_ads`] after this message: cached consent from
+/// a previous session may still permit ads. A consumer may also offer or
+/// schedule an explicit [`RequestConsent`] retry.
+#[derive(Message, Clone, Debug)]
+pub struct ConsentInfoUpdateFailed {
+    pub error: String,
+}
 
 // ---------- Wire event (bridge -> Rust) ----------
 
@@ -497,6 +518,10 @@ fn consent_status() -> ConsentStatus {
     ConsentStatus::from_i32(unsafe { backend::admob_consent_status() })
 }
 
+fn can_request_ads() -> bool {
+    unsafe { backend::admob_can_request_ads() != 0 }
+}
+
 fn privacy_options_requirement() -> PrivacyOptionsRequirement {
     PrivacyOptionsRequirement::from_i32(unsafe {
         backend::admob_privacy_options_requirement_status()
@@ -539,6 +564,7 @@ impl Plugin for AdsPlugin {
             .add_message::<RewardEarned>()
             .add_message::<AdClicked>()
             .add_message::<ConsentUpdated>()
+            .add_message::<ConsentInfoUpdateFailed>()
             .add_systems(Update, (init_once, pump_requests, poll_backend).chain());
     }
 }
@@ -625,6 +651,7 @@ fn poll_backend(
     mut reward: MessageWriter<RewardEarned>,
     mut clicked: MessageWriter<AdClicked>,
     mut consent_updated: MessageWriter<ConsentUpdated>,
+    mut consent_update_failed: MessageWriter<ConsentInfoUpdateFailed>,
 ) {
     if !poll.inited {
         return;
@@ -636,12 +663,20 @@ fn poll_backend(
         state.consent = consent;
         consent_updated.write(ConsentUpdated(consent));
     }
+    let ready = can_request_ads();
+    if state.can_request_ads != ready {
+        state.can_request_ads = ready;
+    }
     let privacy_options = privacy_options_requirement();
     if privacy_options != *privacy_options_state {
         *privacy_options_state = privacy_options;
     }
 
     for ev in drain_events() {
+        if ev.kind == "consent_update_failed" {
+            consent_update_failed.write(ConsentInfoUpdateFailed { error: ev.error });
+            continue;
+        }
         let Some(format) = AdFormat::from_i32(ev.format) else {
             continue;
         };
@@ -735,6 +770,8 @@ mod tests {
             "BEVY_ADMOB_FAKE_REWARD_AMOUNT",
             "BEVY_ADMOB_FAKE_REWARD_TYPE",
             "BEVY_ADMOB_FAKE_CONSENT",
+            "BEVY_ADMOB_FAKE_CAN_REQUEST_ADS",
+            "BEVY_ADMOB_FAKE_CONSENT_UPDATE",
             "BEVY_ADMOB_FAKE_PRIVACY_OPTIONS",
         ] {
             unsafe { std::env::remove_var(key) };
@@ -941,10 +978,65 @@ mod tests {
             app.world().resource::<AdmobState>().consent,
             ConsentStatus::Obtained
         );
-        assert!(!ConsentStatus::Unknown.can_request_ads());
-        assert!(ConsentStatus::NotRequired.can_request_ads());
-        assert!(ConsentStatus::Obtained.can_request_ads());
-        assert!(!ConsentStatus::Required.can_request_ads());
+        assert!(app.world().resource::<AdmobState>().can_request_ads);
+    }
+
+    #[test]
+    fn native_readiness_is_not_inferred_from_coarse_consent_status() {
+        let _guard = guarded();
+        unsafe {
+            std::env::set_var("BEVY_ADMOB_FAKE_CONSENT", "unknown");
+            std::env::set_var("BEVY_ADMOB_FAKE_CAN_REQUEST_ADS", "true");
+        }
+
+        let mut app = build_app();
+        app.insert_resource(AdmobConfig::test_ads());
+        app.update();
+
+        let state = app.world().resource::<AdmobState>();
+        assert_eq!(state.consent, ConsentStatus::Unknown);
+        assert!(state.can_request_ads);
+    }
+
+    #[derive(Resource, Default)]
+    struct ConsentFailureRecorder(Vec<String>);
+
+    fn record_consent_failures(
+        mut recorder: ResMut<ConsentFailureRecorder>,
+        mut failures: MessageReader<ConsentInfoUpdateFailed>,
+    ) {
+        recorder
+            .0
+            .extend(failures.read().map(|failure| failure.error.clone()));
+    }
+
+    #[test]
+    fn consent_update_failure_is_observable_and_can_recover() {
+        let _guard = guarded();
+        unsafe {
+            std::env::set_var("BEVY_ADMOB_FAKE_CONSENT", "unknown");
+            std::env::set_var("BEVY_ADMOB_FAKE_CONSENT_UPDATE", "fail_once");
+        }
+
+        let mut app = build_app();
+        app.init_resource::<ConsentFailureRecorder>()
+            .insert_resource(AdmobConfig::test_ads())
+            .add_systems(Update, record_consent_failures);
+        app.update();
+        app.update();
+
+        assert!(!app.world().resource::<AdmobState>().can_request_ads);
+        assert_eq!(app.world().resource::<ConsentFailureRecorder>().0.len(), 1);
+
+        app.world_mut()
+            .resource_mut::<Messages<RequestConsent>>()
+            .write(RequestConsent);
+        app.update();
+        app.update();
+
+        let state = app.world().resource::<AdmobState>();
+        assert_eq!(state.consent, ConsentStatus::Obtained);
+        assert!(state.can_request_ads);
     }
 
     #[test]

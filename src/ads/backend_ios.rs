@@ -34,6 +34,8 @@ unsafe extern "C" {
     pub fn admob_present_privacy_options();
     /// 0 unknown, 1 required, 2 not-required, 3 obtained.
     pub fn admob_consent_status() -> i32;
+    /// Whether UMP currently permits ad requests (0/1).
+    pub fn admob_can_request_ads() -> i32;
     /// 0 unknown, 1 required, 2 not-required.
     pub fn admob_privacy_options_requirement_status() -> i32;
     /// JSON array of pending events, draining the queue. Each element is

@@ -52,6 +52,7 @@ import UserMessagingPlatform
 private struct AdMobSharedState {
     var events: [[String: Any]] = []
     var consentStatus: Int32 = 0          // 0 unknown,1 required,2 not-required,3 obtained
+    var canRequestAds = false
     var privacyOptionsRequirement: Int32 = 0 // 0 unknown,1 required,2 not-required
     var eventsJSONPtr: UnsafeMutablePointer<CChar>?
 }
@@ -85,6 +86,15 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
         shared_.withLock { $0.events.append(event) }
     }
 
+    private func emitConsentUpdateFailure(_ error: Error) {
+        let event: [String: Any] = [
+            "format": -1,
+            "kind": "consent_update_failed",
+            "error": String(describing: error),
+        ]
+        shared_.withLock { $0.events.append(event) }
+    }
+
     private func setConsentStatus(_ value: Int32) {
         shared_.withLock { $0.consentStatus = value }
     }
@@ -94,6 +104,7 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     }
 
     func consentStatusValue() -> Int32 { shared_.withLock { $0.consentStatus } }
+    func canRequestAdsValue() -> Int32 { shared_.withLock { $0.canRequestAds ? 1 : 0 } }
     func privacyOptionsRequirementValue() -> Int32 {
         shared_.withLock { $0.privacyOptionsRequirement }
     }
@@ -164,6 +175,9 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
                     .requestConsentInfoUpdate(with: self.consentRequestParameters())
             } catch {
                 NSLog("[admob] consent info update failed: %@", String(describing: error))
+                self.cacheConsentStatus()
+                self.emitConsentUpdateFailure(error)
+                return
             }
             self.cacheConsentStatus()
             if present, let vc = self.rootViewController() {
@@ -177,6 +191,7 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
         }
         #else
         setConsentStatus(3) // no UMP: treat as obtained
+        shared_.withLock { $0.canRequestAds = true }
         setPrivacyOptionsRequirement(2)
         #endif
     }
@@ -211,7 +226,11 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
         case .unknown: value = 0
         @unknown default: value = 0
         }
-        setConsentStatus(value)
+        let canRequestAds = ConsentInformation.shared.canRequestAds
+        shared_.withLock {
+            $0.consentStatus = value
+            $0.canRequestAds = canRequestAds
+        }
         let privacyOptions: Int32
         switch ConsentInformation.shared.privacyOptionsRequirementStatus {
         case .required: privacyOptions = 1
@@ -462,6 +481,9 @@ public func admob_present_privacy_options() {
 @_cdecl("admob_consent_status")
 public func admob_consent_status() -> Int32 { AdMobBridge.shared.consentStatusValue() }
 
+@_cdecl("admob_can_request_ads")
+public func admob_can_request_ads() -> Int32 { AdMobBridge.shared.canRequestAdsValue() }
+
 @_cdecl("admob_privacy_options_requirement_status")
 public func admob_privacy_options_requirement_status() -> Int32 {
     AdMobBridge.shared.privacyOptionsRequirementValue()
@@ -489,6 +511,7 @@ public func admob_init_with_ump_test(
 @_cdecl("admob_request_consent") public func admob_request_consent() {}
 @_cdecl("admob_present_privacy_options") public func admob_present_privacy_options() {}
 @_cdecl("admob_consent_status") public func admob_consent_status() -> Int32 { 3 }
+@_cdecl("admob_can_request_ads") public func admob_can_request_ads() -> Int32 { 1 }
 @_cdecl("admob_privacy_options_requirement_status")
 public func admob_privacy_options_requirement_status() -> Int32 { 2 }
 @_cdecl("admob_drain_events") public func admob_drain_events() -> UnsafePointer<CChar>? { nil }

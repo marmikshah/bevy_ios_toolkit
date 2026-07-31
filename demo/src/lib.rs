@@ -211,21 +211,21 @@ fn on_store_ads_button_press(
             Action::Purchase => {
                 purchase.write(PurchaseRequest(REMOVE_ADS.into()));
             }
-            Action::Interstitial if admob.consent.can_request_ads() => queue_ad(
+            Action::Interstitial if admob.can_request_ads => queue_ad(
                 AdFormat::Interstitial,
                 &inventory,
                 &mut pending,
                 &mut load,
                 &mut show,
             ),
-            Action::Rewarded if admob.consent.can_request_ads() => queue_ad(
+            Action::Rewarded if admob.can_request_ads => queue_ad(
                 AdFormat::Rewarded,
                 &inventory,
                 &mut pending,
                 &mut load,
                 &mut show,
             ),
-            Action::ToggleBanner if admob.consent.can_request_ads() => {
+            Action::ToggleBanner if admob.can_request_ads => {
                 if admob.banner_visible {
                     hide_banner.write(HideBanner);
                 } else {
@@ -364,10 +364,11 @@ fn update_status(
     };
     let owns = entitlements.owns(REMOVE_ADS);
     text.0 = format!(
-        "ads-removed: {owns} | interstitial: {:?} | banner: {} | consent: {:?} | privacy: {:?} | att: {:?} | gc: {:?} | thermal: {:?}{}",
+        "ads-removed: {owns} | interstitial: {:?} | banner: {} | consent: {:?} | ads-ready: {} | privacy: {:?} | att: {:?} | gc: {:?} | thermal: {:?}{}",
         inventory.state(AdFormat::Interstitial),
         admob.banner_visible,
         admob.consent,
+        admob.can_request_ads,
         *privacy_options,
         *att,
         gc.auth,

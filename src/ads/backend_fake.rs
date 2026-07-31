@@ -17,6 +17,8 @@ use super::{AdEvent, AdFormat};
 struct Fake {
     use_test_ads: bool,
     consent: i32,
+    can_request_ads: bool,
+    fail_consent_updates: bool,
     privacy_options: i32,
     privacy_options_presentations: u32,
     consent_debug_geography: i32,
@@ -57,6 +59,12 @@ fn event(format: i32, kind: &str) -> AdEvent {
     }
 }
 
+fn consent_update_failure() -> AdEvent {
+    let mut ev = event(-1, "consent_update_failed");
+    ev.error = "fake consent info update failure".into();
+    ev
+}
+
 pub unsafe fn admob_init_with_ump_test(
     _test_devices: *const c_char,
     use_test_ads: i32,
@@ -67,14 +75,26 @@ pub unsafe fn admob_init_with_ump_test(
     f.use_test_ads = use_test_ads != 0;
     f.consent_debug_geography = consent_debug_geography;
     f.reset_consent = reset_consent != 0;
-    f.consent = if std::env::var("BEVY_ADMOB_FAKE_CONSENT")
-        .map(|v| v.eq_ignore_ascii_case("required"))
-        .unwrap_or(false)
+    f.consent = match std::env::var("BEVY_ADMOB_FAKE_CONSENT")
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
     {
-        1 // required
-    } else {
-        3 // obtained
+        "unknown" => 0,
+        "required" => 1,
+        "not_required" | "not-required" => 2,
+        _ => 3,
     };
+    f.can_request_ads = std::env::var("BEVY_ADMOB_FAKE_CAN_REQUEST_ADS")
+        .map(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(matches!(f.consent, 2 | 3));
+    let update_failure = std::env::var("BEVY_ADMOB_FAKE_CONSENT_UPDATE")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    f.fail_consent_updates = update_failure == "failed";
+    if matches!(update_failure.as_str(), "failed" | "fail_once") {
+        f.push(consent_update_failure());
+    }
     f.privacy_options = if std::env::var("BEVY_ADMOB_FAKE_PRIVACY_OPTIONS")
         .map(|v| v.eq_ignore_ascii_case("required"))
         .unwrap_or(false)
@@ -146,8 +166,13 @@ pub unsafe fn admob_banner_hide() {
 
 pub unsafe fn admob_request_consent() {
     let mut f = lock();
+    if f.fail_consent_updates {
+        f.push(consent_update_failure());
+        return;
+    }
     // Presenting the form resolves any outstanding requirement.
     f.consent = 3;
+    f.can_request_ads = true;
 }
 
 pub unsafe fn admob_present_privacy_options() {
@@ -156,6 +181,10 @@ pub unsafe fn admob_present_privacy_options() {
 
 pub unsafe fn admob_consent_status() -> i32 {
     lock().consent
+}
+
+pub unsafe fn admob_can_request_ads() -> i32 {
+    lock().can_request_ads as i32
 }
 
 pub unsafe fn admob_privacy_options_requirement_status() -> i32 {
