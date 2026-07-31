@@ -1,6 +1,6 @@
 #!/bin/sh
 # Canonical pre-push hook: refuse direct master pushes, then mirror CI.
-# Installed by `make hooks` (git config core.hooksPath .githooks).
+# Enable with `git config core.hooksPath .githooks`.
 # Bypass in an emergency with --no-verify.
 set -e
 
@@ -14,5 +14,5 @@ while read -r _local_ref _local_sha remote_ref _remote_sha; do
 	esac
 done
 
-make pre-commit-checks
+make ci
 make test

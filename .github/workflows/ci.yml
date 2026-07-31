@@ -1,4 +1,4 @@
-# Canonical Rust CI. Mirrors the local gate (make pre-commit-checks + test).
+# Canonical Rust CI. Mirrors the local portable gate.
 name: CI
 
 on:
@@ -20,17 +20,4 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - run: make pre-commit-checks
-
-  tests:
-    if: github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Linux build deps for Bevy
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: make test
+      - run: make ci
