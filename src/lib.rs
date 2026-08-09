@@ -5,7 +5,7 @@
 //!
 //! | feature | module | what it bridges |
 //! |---------|--------|-----------------|
-//! | `storekit` | [`store`] | StoreKit 2 in-app purchases |
+//! | `storekit` | [`store`] | StoreKit environment + in-app purchases (iOS only) |
 //! | `ads` | [`ads`] | Google AdMob ads + UMP consent |
 //! | `att` | [`att`] | App Tracking Transparency prompt |
 //! | `gamekit` | [`gamekit`] | Game Center auth, leaderboards, achievements |
@@ -17,12 +17,16 @@
 //! shim must be in your Xcode target or iOS linking fails on undefined symbols.
 //!
 //! ```toml
-//! bevy_ios_toolkit = { version = "0.3", features = ["storekit", "ads", "att"] }
+//! [dependencies]
+//! bevy_ios_toolkit = { version = "0.4", features = ["ads", "att"] }
+//!
+//! [target.'cfg(target_os = "ios")'.dependencies]
+//! bevy_ios_toolkit = { version = "0.4", features = ["storekit"] }
 //! ```
 //!
 //! # The native contract
 //!
-//! Shared across every module (see [`ffi`]):
+//! Shared across every native module:
 //!
 //! - Every native entry point is `@_cdecl` C-ABI, called **from Rust**.
 //! - Async, delegate-driven SDK work surfaces as **polled state** (or a drained
@@ -31,8 +35,9 @@
 //! - Each Swift shim sits behind `#if canImport(...)` with linking stubs, so the
 //!   staticlib links on any target.
 //!
-//! Off iOS every module is a **stateful, env-tunable fake**, so the whole app
-//! flow is exercisable on `cargo run` desktop builds with no device.
+//! Off iOS, integrations keep a fake only where a real cross-platform flow
+//! benefits from one. StoreKit purchases are platform-owned: [`store`] is iOS
+//! only and has no desktop backend.
 //!
 //! ```no_run
 //! use bevy::prelude::*;
@@ -47,10 +52,14 @@
 
 use bevy::prelude::*;
 
-#[cfg(any(feature = "storekit", feature = "ads", feature = "gamekit"))]
+#[cfg(any(
+    all(feature = "storekit", any(target_os = "ios", doc)),
+    feature = "ads",
+    feature = "gamekit"
+))]
 mod ffi;
 
-#[cfg(feature = "storekit")]
+#[cfg(all(feature = "storekit", any(target_os = "ios", doc)))]
 pub mod store;
 
 #[cfg(feature = "ads")]
@@ -71,7 +80,7 @@ pub mod review;
 pub mod prelude {
     pub use crate::IosPlugin;
 
-    #[cfg(feature = "storekit")]
+    #[cfg(all(feature = "storekit", any(target_os = "ios", doc)))]
     pub use crate::store::{
         AppStoreEnvironment, Entitlements, EntitlementsChanged, ProductInfo, ProductsState,
         ProductsUpdated, PurchaseCompleted, PurchaseOutcome, PurchaseRequest, RestoreRequest,
@@ -109,7 +118,7 @@ pub struct IosPlugin;
 
 impl Plugin for IosPlugin {
     fn build(&self, app: &mut App) {
-        #[cfg(feature = "storekit")]
+        #[cfg(all(feature = "storekit", any(target_os = "ios", doc)))]
         app.add_plugins(store::StorePlugin);
         #[cfg(feature = "ads")]
         app.add_plugins(ads::AdsPlugin);

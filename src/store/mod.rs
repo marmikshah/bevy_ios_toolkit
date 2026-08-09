@@ -1,9 +1,9 @@
 //! StoreKit 2 in-app purchases as Bevy resources + messages.
 //!
 //! Flow:
-//! 1. Read [`AppStoreEnvironment`] to choose non-production service
+//! 1. On iOS, read [`AppStoreEnvironment`] to choose non-production service
 //!    configuration for Xcode, sandbox, or unavailable execution. Wait while
-//!    it is [`AppStoreEnvironment::Pending`].
+//!    it is [`AppStoreEnvironment::Pending`]. The resource is absent off iOS.
 //! 2. Insert [`StoreConfig`] with your product ids. The plugin calls into the
 //!    backend once, which fetches products and the current entitlements.
 //! 3. Read [`StoreProducts`] for prices/titles to render your store UI.
@@ -18,16 +18,10 @@ use std::fmt;
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
 
 use crate::ffi::read_cstr;
 
-#[cfg(target_os = "ios")]
 #[path = "backend_ios.rs"]
-mod backend;
-
-#[cfg(not(target_os = "ios"))]
-#[path = "backend_fake.rs"]
 mod backend;
 
 // ---------- Types ----------
@@ -67,7 +61,9 @@ pub enum PurchaseOutcome {
 /// TestFlight uses [`Sandbox`](Self::Sandbox). Xcode without a StoreKit
 /// configuration can also report sandbox, so this is deliberately not an
 /// install-source detector. Wait for a terminal value, then select production
-/// service configuration only for [`Production`](Self::Production).
+/// service configuration only when [`is_production`](Self::is_production)
+/// returns `true`.
+/// [`StorePlugin`] inserts this resource only on iOS.
 ///
 /// <https://developer.apple.com/documentation/storekit/apptransaction/environment>
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -91,6 +87,14 @@ impl AppStoreEnvironment {
     /// Whether StoreKit has produced a terminal result.
     pub const fn is_resolved(self) -> bool {
         !matches!(self, Self::Pending)
+    }
+
+    /// Whether production-only service configuration is safe to use.
+    ///
+    /// Pending, test, unavailable, and unknown environments all return `false`
+    /// so callers fail closed to their test configuration.
+    pub const fn is_production(self) -> bool {
+        matches!(self, Self::Production)
     }
 }
 
@@ -255,7 +259,6 @@ fn fetch_entitlements() -> Vec<String> {
 
 #[derive(Resource)]
 struct StorePoll {
-    environment_inited: bool,
     inited: bool,
     last_products: ProductsState,
     ent_rev: u64,
@@ -264,7 +267,6 @@ struct StorePoll {
 impl Default for StorePoll {
     fn default() -> Self {
         Self {
-            environment_inited: false,
             inited: false,
             last_products: ProductsState::Loading,
             ent_rev: 0,
@@ -276,8 +278,7 @@ pub struct StorePlugin;
 
 impl Plugin for StorePlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<AppStoreEnvironment>()
-            .init_resource::<StoreProducts>()
+        app.init_resource::<StoreProducts>()
             .init_resource::<Entitlements>()
             .init_resource::<StorePoll>()
             .add_message::<PurchaseRequest>()
@@ -285,30 +286,23 @@ impl Plugin for StorePlugin {
             .add_message::<ProductsUpdated>()
             .add_message::<PurchaseCompleted>()
             .add_message::<EntitlementsChanged>()
-            .add_systems(
-                Update,
-                (
-                    init_environment_once,
-                    poll_environment,
-                    init_once,
-                    pump_requests,
-                    poll_store,
-                )
-                    .chain(),
-            );
+            .add_systems(Update, (init_once, pump_requests, poll_store).chain());
+
+        app.init_resource::<AppStoreEnvironment>()
+            .add_systems(Update, (init_environment_once, poll_environment).chain());
     }
 }
 
 /// Start environment resolution even when the consumer has no products.
-fn init_environment_once(mut poll: ResMut<StorePoll>) {
-    if poll.environment_inited {
+fn init_environment_once(mut initialized: Local<bool>) {
+    if *initialized {
         return;
     }
     init_environment();
-    poll.environment_inited = true;
+    *initialized = true;
 }
 
-/// Publish and log the immutable terminal environment exactly once.
+/// Publish the immutable terminal environment exactly once.
 fn poll_environment(mut current: ResMut<AppStoreEnvironment>) {
     if current.is_resolved() {
         return;
@@ -319,24 +313,6 @@ fn poll_environment(mut current: ResMut<AppStoreEnvironment>) {
     }
 
     *current = resolved;
-    match resolved {
-        AppStoreEnvironment::Xcode
-        | AppStoreEnvironment::Sandbox
-        | AppStoreEnvironment::Production => {
-            info!("App Store environment resolved: {resolved}");
-        }
-        AppStoreEnvironment::Unavailable => {
-            warn!(
-                "App Store environment resolved: unavailable; use non-production service configuration"
-            );
-        }
-        AppStoreEnvironment::Unknown => {
-            warn!(
-                "App Store environment resolved: unknown; use non-production service configuration"
-            );
-        }
-        AppStoreEnvironment::Pending => {}
-    }
 }
 
 /// Initialize the backend the first frame a non-empty [`StoreConfig`] exists.
@@ -408,70 +384,5 @@ fn poll_store(
         poll.ent_rev = rev;
         entitlements.owned = fetch_entitlements().into_iter().collect();
         entitlements_changed.write(EntitlementsChanged);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn buy_once(mut requests: MessageWriter<PurchaseRequest>, mut fired: Local<bool>) {
-        if !*fired {
-            *fired = true;
-            requests.write(PurchaseRequest("com.test.removeads".into()));
-        }
-    }
-
-    #[test]
-    fn environment_wire_values_are_explicit_and_fail_safe() {
-        assert_eq!(environment_from_raw(0), AppStoreEnvironment::Pending);
-        assert_eq!(environment_from_raw(1), AppStoreEnvironment::Xcode);
-        assert_eq!(environment_from_raw(2), AppStoreEnvironment::Sandbox);
-        assert_eq!(environment_from_raw(3), AppStoreEnvironment::Production);
-        assert_eq!(environment_from_raw(4), AppStoreEnvironment::Unavailable);
-        assert_eq!(environment_from_raw(5), AppStoreEnvironment::Unknown);
-        assert_eq!(environment_from_raw(i32::MAX), AppStoreEnvironment::Unknown);
-    }
-
-    #[test]
-    fn fake_resolves_environment_without_store_config() {
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins);
-        app.add_plugins(StorePlugin);
-
-        app.update();
-
-        assert_eq!(
-            *app.world().resource::<AppStoreEnvironment>(),
-            AppStoreEnvironment::Unavailable
-        );
-    }
-
-    /// Drives the whole plugin against the fake backend: config -> products
-    /// load -> purchase request -> entitlement granted.
-    #[test]
-    fn fake_purchase_flow_grants_entitlement() {
-        let mut app = App::new();
-        app.add_plugins(MinimalPlugins);
-        app.add_plugins(StorePlugin);
-        app.insert_resource(StoreConfig {
-            product_ids: vec!["com.test.removeads".into()],
-        });
-        app.add_systems(Update, buy_once);
-
-        // A few ticks: init, fire request, pump, poll the result.
-        for _ in 0..5 {
-            app.update();
-        }
-
-        let products = app.world().resource::<StoreProducts>();
-        assert_eq!(products.state, ProductsState::Ready);
-        assert!(products.get("com.test.removeads").is_some());
-
-        let entitlements = app.world().resource::<Entitlements>();
-        assert!(
-            entitlements.owns("com.test.removeads"),
-            "purchase should have granted the entitlement"
-        );
     }
 }

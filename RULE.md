@@ -9,8 +9,9 @@ Less is more. Explicit is always better than implicit.
 - Swift exposes `@_cdecl` C-ABI functions called from Rust. Asynchronous native
   results return through polled state or drained event queues, never callbacks
   into Rust.
-- Stateful integrations use an iOS backend and a deterministic desktop fake.
-  Fire-and-forget integrations remain simple functions.
+- Gate platform-owned capabilities at the target boundary. Use a deterministic
+  desktop fake only when a real platform-neutral consumer flow needs one;
+  StoreKit purchases are iOS-only and have no desktop backend.
 - Keep native symbols, Rust features, Swift products, and public documentation
   in lockstep. A missing Swift product must fail at link time.
 - `demo/` is an excluded consumer crate with a thin XcodeGen iOS shell. It
@@ -20,10 +21,11 @@ Less is more. Explicit is always better than implicit.
 
 - Run `make pre-commit-checks`, `make test`, and `make ci` before pushing.
 - Verify native bridge changes with a resolved unsigned iOS build in addition
-  to Rust tests and the desktop fake.
+  to Rust tests and any applicable desktop fake.
 - Keep examples generic and public: no private identifiers, product names, or
   infrastructure details.
-- Add a deterministic fake test for every new polled state or message.
+- Test platform-neutral policy with injected typed outcomes. Do not invent a
+  platform capability solely to make its native state runnable on desktop.
 
 ## Workflow
 

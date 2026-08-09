@@ -125,26 +125,32 @@ final class StoreBridge: @unchecked Sendable {
     private func resolveEnvironment() async {
         do {
             let result = try await AppTransaction.shared
-            let value: Int32
             switch result {
             case .verified(let transaction):
                 let environment = transaction.environment
                 if environment == .xcode {
-                    value = 1
+                    publishEnvironment(1, logValue: "xcode")
                 } else if environment == .sandbox {
-                    value = 2
+                    publishEnvironment(2, logValue: "sandbox")
                 } else if environment == .production {
-                    value = 3
+                    publishEnvironment(3, logValue: "production")
                 } else {
-                    value = 5
+                    publishEnvironment(5, logValue: "unknown (\(environment.rawValue))")
                 }
-            case .unverified:
-                value = 4
+            case .unverified(_, let error):
+                publishEnvironment(
+                    4,
+                    logValue: "unavailable (verification failed: \(error))"
+                )
             }
-            state.withLock { $0.environmentState = value }
         } catch {
-            state.withLock { $0.environmentState = 4 }
+            publishEnvironment(4, logValue: "unavailable (\(error))")
         }
+    }
+
+    private func publishEnvironment(_ value: Int32, logValue: String) {
+        state.withLock { $0.environmentState = value }
+        NSLog("[store] App Store environment: %@", logValue)
     }
 
     private func loadProducts(_ ids: [String]) async {
@@ -281,7 +287,10 @@ public func store_entitlements_json() -> UnsafePointer<CChar>? { StoreBridge.sha
 #else
 // StoreKit unavailable: linking stubs. Products report failed, nothing owned.
 
-@_cdecl("store_environment_init") public func store_environment_init() {}
+@_cdecl("store_environment_init")
+public func store_environment_init() {
+    NSLog("[store] App Store environment: unavailable (StoreKit unavailable)")
+}
 @_cdecl("store_environment_state") public func store_environment_state() -> Int32 { 4 }
 @_cdecl("store_init") public func store_init(_ ids: UnsafePointer<CChar>) {}
 @_cdecl("store_products_state") public func store_products_state() -> Int32 { 2 }

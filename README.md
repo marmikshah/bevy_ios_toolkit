@@ -12,10 +12,9 @@ ECS resources and messages. One crate, one plugin, a **feature per integration**
 | `review` | `review` | StoreKit review prompt |
 | `platform` | `platform` | haptics, safe-area insets, outbound links, share sheet, thermal/low-power state |
 
-> **Status: experimental (0.3, pre-release).** APIs will move. Live behaviour
+> **Status: experimental (0.4, pre-release).** APIs will move. Live behaviour
 > needs a real device, the relevant Apple/Google setup, and the matching Swift
-> shim linked from the companion SPM package — see "iOS integration". Everything
-> is fully exercisable on desktop first via the built-in fakes.
+> shim linked from the companion SPM package — see "iOS integration".
 
 ## How it works
 
@@ -28,9 +27,10 @@ Every module shares one native contract:
 - Each Swift shim (an SPM product, see "iOS integration") sits behind
   `#if canImport(...)` with linking stubs, so the staticlib links on any target.
 
-Off iOS every module is a **stateful, env-tunable fake**, so the whole app flow —
-purchases, ads, rewards, consent, ATT, Game Center — runs on `cargo run` desktop
-builds with no device.
+Off iOS, integrations keep a stateful fake only when there is a meaningful
+cross-platform flow to exercise. StoreKit is different: purchases belong to the
+platform store, so the `store` module exists only on iOS and has no desktop
+backend.
 
 ## Features are opt-in for a reason
 
@@ -40,7 +40,11 @@ enabling a feature you haven't wired natively fails loudly at link time instead
 of misbehaving at runtime.
 
 ```toml
-bevy_ios_toolkit = { version = "0.3", features = ["storekit", "ads", "att"] }
+[dependencies]
+bevy_ios_toolkit = { version = "0.4", features = ["ads", "att"] }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+bevy_ios_toolkit = { version = "0.4", features = ["storekit"] }
 ```
 
 ## Quick start
@@ -50,13 +54,16 @@ use bevy::prelude::*;
 use bevy_ios_toolkit::prelude::*;
 
 fn main() {
-    App::new()
-        .add_plugins((DefaultPlugins, IosPlugin))
-        .insert_resource(AdmobConfig::test_ads())          // `ads`
-        .insert_resource(StoreConfig {                     // `storekit`
-            product_ids: vec!["com.example.app.removeads".into()],
-        })
-        .run();
+    let mut app = App::new();
+    app.add_plugins((DefaultPlugins, IosPlugin))
+        .insert_resource(AdmobConfig::test_ads());         // `ads`
+
+    #[cfg(target_os = "ios")]
+    app.insert_resource(StoreConfig {                      // `storekit`
+        product_ids: vec!["com.example.app.removeads".into()],
+    });
+
+    app.run();
 }
 
 // Show an interstitial once it's loaded.
@@ -73,20 +80,22 @@ fn ads_ready(admob: Res<AdmobState>) {
 }
 
 // Gate features on ownership (covers purchase, restore, relaunch).
+#[cfg(target_os = "ios")]
 fn gate(entitlements: Res<Entitlements>) {
     if entitlements.owns("com.example.app.removeads") { /* hide ads */ }
 }
 
 // Wait for StoreKit, then use production service configuration only for the
 // production App Store. Xcode, TestFlight/sandbox, and failures stay on test.
+#[cfg(target_os = "ios")]
 fn choose_service_configuration(environment: Res<AppStoreEnvironment>) {
-    match *environment {
-        AppStoreEnvironment::Pending => { /* wait before initializing the SDK */ }
-        AppStoreEnvironment::Production => { /* insert production config */ }
-        AppStoreEnvironment::Xcode
-        | AppStoreEnvironment::Sandbox
-        | AppStoreEnvironment::Unavailable
-        | AppStoreEnvironment::Unknown => { /* insert test config */ }
+    if !environment.is_resolved() {
+        return; // wait before initializing the SDK
+    }
+    if environment.is_production() {
+        /* insert production config */
+    } else {
+        /* insert test config */
     }
 }
 
@@ -98,7 +107,8 @@ fn privacy_entry_point(requirement: Res<PrivacyOptionsRequirement>) {
 }
 ```
 
-See [`demo/`](demo/) for a button-per-feature app that runs on desktop and iOS.
+See [`demo/`](demo/) for the supported fake integrations on desktop and the
+complete native surface on iOS.
 
 ## iOS integration
 
@@ -133,23 +143,26 @@ are no files to vendor or keep in sync by hand.
 4. The `demo/ios/` XcodeGen project shows the whole wiring end to end — it
    consumes the package by relative path.
 
-`AppStoreEnvironment` resolves independently of `StoreConfig` and logs its
-terminal value once. Apple reports TestFlight as `Sandbox`; sandbox is not a
-reliable distinction between TestFlight and every development install. Use the
-resource for runtime service or ad-unit selection, but keep build-time values
-such as `GADApplicationIdentifier` in the app target configuration.
+On iOS, `AppStoreEnvironment` resolves independently of `StoreConfig` and the
+Swift bridge logs its terminal value once. The resource is not inserted on
+non-iOS targets; they do not need an App Store classification. Apple reports
+TestFlight as `Sandbox`, but sandbox is not a reliable distinction between
+TestFlight and every development install. Use the resource for runtime service
+or ad-unit selection, but keep build-time values such as
+`GADApplicationIdentifier` in the app target configuration.
 
 ## Testing
 
 ```bash
 cargo test --features all
-cargo run --example store --features storekit
 cargo run --example ads   --features ads
+cargo check --target aarch64-apple-ios --features storekit
 ```
 
-The fakes are env-tunable (force no-fill, show-failures, consent prompts,
-privacy-options requirements, ATT outcomes, Game Center sign-out) — each module
-documents its knobs. An explicit `UmpTestConfig` makes geography testing
+The applicable fakes are env-tunable (force no-fill, show-failures, consent
+prompts, privacy-options requirements, ATT outcomes, Game Center sign-out) —
+each module documents its knobs. StoreKit has no desktop fake. An explicit
+`UmpTestConfig` makes geography testing
 deterministic only while `AdmobConfig::use_test_ads` is enabled; production
 configurations ignore its geography and reset fields. Simulators are test
 devices automatically. For a physical device, include UMP's logged hashed test
@@ -160,7 +173,7 @@ validated in Xcode with the SDKs linked.
 
 | `bevy_ios_toolkit` | `bevy` | iOS | AdMob SDK |
 |--------------------|--------|-----|-----------|
-| 0.3                | 0.19   | 16+ | 12.3–12.x (+ UMP 3.x) |
+| 0.4                | 0.19   | 16+ | 12.3–12.x (+ UMP 3.x) |
 
 ## Authorship
 

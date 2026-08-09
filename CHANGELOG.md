@@ -5,14 +5,19 @@ format loosely [Keep a Changelog](https://keepachangelog.com). Entries begin
 from the point this file was added — earlier releases live in the crates.io
 version history and the git log.
 
-## 0.3.4 — 2026-08-09
+## 0.4.0 — 2026-08-09
 
 ### Added
 - Expose the verified StoreKit app environment as a typed Bevy resource,
-  resolved independently of purchase configuration and logged once.
-- Treat desktop, unavailable, unverified, and unknown environments explicitly
-  so consumers can reserve production service configuration for the production
-  App Store.
+  resolved independently of purchase configuration and logged once on iOS.
+- Treat unavailable, unverified, and unknown iOS environments explicitly so
+  consumers can reserve production service configuration for the production
+  App Store; non-iOS targets receive no App Store environment resource.
+- Provide a fail-closed `is_production()` predicate for service configuration.
+
+### Changed
+- Make the `storekit` Rust surface iOS-only and remove its desktop purchase
+  backend and example. Other platforms own their purchase integrations.
 
 ## 0.3.3 — 2026-08-01
 
