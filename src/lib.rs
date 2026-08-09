@@ -52,6 +52,10 @@
 
 use bevy::prelude::*;
 
+#[cfg(all(feature = "storekit", any(target_os = "ios", doc, test)))]
+#[path = "store/environment.rs"]
+mod store_environment;
+
 #[cfg(any(
     all(feature = "storekit", any(target_os = "ios", doc)),
     feature = "ads",

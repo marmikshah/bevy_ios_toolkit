@@ -14,12 +14,13 @@
 
 use std::collections::HashSet;
 use std::ffi::CString;
-use std::fmt;
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::ffi::read_cstr;
+pub use crate::store_environment::AppStoreEnvironment;
+use crate::store_environment::environment_from_raw;
 
 #[path = "backend_ios.rs"]
 mod backend;
@@ -54,61 +55,6 @@ pub enum PurchaseOutcome {
     Cancelled,
     /// Deferred — e.g. Ask to Buy. Entitlement may arrive later via updates.
     Pending,
-}
-
-/// The environment reported by the verified StoreKit 2 app transaction.
-///
-/// TestFlight uses [`Sandbox`](Self::Sandbox). Xcode without a StoreKit
-/// configuration can also report sandbox, so this is deliberately not an
-/// install-source detector. Wait for a terminal value, then select production
-/// service configuration only when [`is_production`](Self::is_production)
-/// returns `true`.
-/// [`StorePlugin`] inserts this resource only on iOS.
-///
-/// <https://developer.apple.com/documentation/storekit/apptransaction/environment>
-#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum AppStoreEnvironment {
-    /// `AppTransaction.shared` is still resolving.
-    #[default]
-    Pending,
-    /// StoreKit testing configured by Xcode.
-    Xcode,
-    /// The App Store sandbox, including TestFlight.
-    Sandbox,
-    /// The production App Store.
-    Production,
-    /// The app transaction could not be loaded or verified.
-    Unavailable,
-    /// StoreKit returned an environment this toolkit does not yet recognize.
-    Unknown,
-}
-
-impl AppStoreEnvironment {
-    /// Whether StoreKit has produced a terminal result.
-    pub const fn is_resolved(self) -> bool {
-        !matches!(self, Self::Pending)
-    }
-
-    /// Whether production-only service configuration is safe to use.
-    ///
-    /// Pending, test, unavailable, and unknown environments all return `false`
-    /// so callers fail closed to their test configuration.
-    pub const fn is_production(self) -> bool {
-        matches!(self, Self::Production)
-    }
-}
-
-impl fmt::Display for AppStoreEnvironment {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Pending => "pending",
-            Self::Xcode => "xcode",
-            Self::Sandbox => "sandbox",
-            Self::Production => "production",
-            Self::Unavailable => "unavailable",
-            Self::Unknown => "unknown",
-        })
-    }
 }
 
 // ---------- Resources ----------
@@ -185,17 +131,6 @@ fn init_environment() {
 
 fn environment() -> AppStoreEnvironment {
     environment_from_raw(unsafe { backend::store_environment_state() })
-}
-
-fn environment_from_raw(value: i32) -> AppStoreEnvironment {
-    match value {
-        0 => AppStoreEnvironment::Pending,
-        1 => AppStoreEnvironment::Xcode,
-        2 => AppStoreEnvironment::Sandbox,
-        3 => AppStoreEnvironment::Production,
-        4 => AppStoreEnvironment::Unavailable,
-        _ => AppStoreEnvironment::Unknown,
-    }
 }
 
 fn init(ids: &[String]) {
