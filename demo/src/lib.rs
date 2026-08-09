@@ -1,7 +1,8 @@
 //! A button-per-feature demo of `bevy_ios_toolkit`. One tappable row per
 //! integration, with a live status line at the top.
 //!
-//! On desktop it runs against the built-in fakes:
+//! On desktop it runs the integrations with meaningful built-in fakes; the
+//! platform-owned StoreKit purchase surface is absent:
 //!
 //! ```text
 //! cargo run --bin demo        # from this crate
@@ -13,6 +14,7 @@
 use bevy::prelude::*;
 use bevy_ios_toolkit::prelude::*;
 
+#[cfg(target_os = "ios")]
 const REMOVE_ADS: &str = "iap.playground.removeads";
 const LEADERBOARD: &str = "lb.demo.highscore";
 const ACHIEVEMENT: &str = "ach.demo.first_tap";
@@ -26,52 +28,57 @@ pub extern "C" fn main_rs() {
 
 /// Build and run the demo app. Called by the desktop binary and by [`main_rs`].
 pub fn run() {
-    App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "bevy_ios_toolkit demo".into(),
-                // iOS: fill the device screen at its native resolution. Without
-                // this Bevy keeps its default 1280x720 window, which iOS then
-                // letterboxes — pushing the UI off-screen. Desktop stays a normal
-                // resizable window.
-                #[cfg(target_os = "ios")]
-                mode: bevy::window::WindowMode::BorderlessFullscreen(
-                    bevy::window::MonitorSelection::Primary,
-                ),
-                #[cfg(target_os = "ios")]
-                resizable: false,
-                #[cfg(target_os = "ios")]
-                prefers_home_indicator_hidden: true,
-                #[cfg(target_os = "ios")]
-                prefers_status_bar_hidden: true,
-                ..default()
-            }),
-            ..default()
-        }))
-        .add_plugins(IosPlugin)
-        .insert_resource(StoreConfig {
-            product_ids: vec![REMOVE_ADS.into()],
-        })
-        .insert_resource(AdmobConfig::test_ads())
-        .init_resource::<PendingShow>()
-        .add_systems(Startup, setup)
-        .add_systems(
-            Update,
-            (
-                on_store_ads_button_press,
-                on_platform_button_press,
-                drive_pending,
-                restyle_buttons,
-                sync_privacy_options_button,
-                update_status,
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "bevy_ios_toolkit demo".into(),
+            // iOS: fill the device screen at its native resolution. Without
+            // this Bevy keeps its default 1280x720 window, which iOS then
+            // letterboxes — pushing the UI off-screen. Desktop stays a normal
+            // resizable window.
+            #[cfg(target_os = "ios")]
+            mode: bevy::window::WindowMode::BorderlessFullscreen(
+                bevy::window::MonitorSelection::Primary,
             ),
-        )
-        .run();
+            #[cfg(target_os = "ios")]
+            resizable: false,
+            #[cfg(target_os = "ios")]
+            prefers_home_indicator_hidden: true,
+            #[cfg(target_os = "ios")]
+            prefers_status_bar_hidden: true,
+            ..default()
+        }),
+        ..default()
+    }))
+    .add_plugins(IosPlugin)
+    .insert_resource(AdmobConfig::test_ads())
+    .init_resource::<PendingShow>()
+    .add_systems(Startup, setup)
+    .add_systems(
+        Update,
+        (
+            on_ads_button_press,
+            on_platform_button_press,
+            drive_pending,
+            restyle_buttons,
+            sync_privacy_options_button,
+            update_status,
+        ),
+    );
+
+    #[cfg(target_os = "ios")]
+    app.insert_resource(StoreConfig {
+        product_ids: vec![REMOVE_ADS.into()],
+    })
+    .add_systems(Update, on_purchase_button_press);
+
+    app.run();
 }
 
 /// One button per feature. Full-screen ads load *and* present from a single tap.
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 enum Action {
+    #[cfg(target_os = "ios")]
     Purchase,
     Interstitial,
     Rewarded,
@@ -86,6 +93,7 @@ enum Action {
 }
 
 const ROWS: &[(&str, Action)] = &[
+    #[cfg(target_os = "ios")]
     ("Buy: Remove Ads", Action::Purchase),
     ("Interstitial Ad", Action::Interstitial),
     ("Rewarded Ad", Action::Rewarded),
@@ -187,15 +195,27 @@ fn restyle_buttons(
     }
 }
 
-/// Fan store and ad button presses out to the matching toolkit message.
+/// Forward an iOS purchase button press to StoreKit.
+#[cfg(target_os = "ios")]
+fn on_purchase_button_press(
+    buttons: Query<(&Interaction, &Action), Changed<Interaction>>,
+    mut purchase: MessageWriter<PurchaseRequest>,
+) {
+    for (interaction, action) in buttons.iter() {
+        if *interaction == Interaction::Pressed && *action == Action::Purchase {
+            purchase.write(PurchaseRequest(REMOVE_ADS.into()));
+        }
+    }
+}
+
+/// Fan ad button presses out to the matching toolkit message.
 #[allow(clippy::too_many_arguments)]
-fn on_store_ads_button_press(
+fn on_ads_button_press(
     buttons: Query<(&Interaction, &Action), Changed<Interaction>>,
     admob: Res<AdmobState>,
     privacy_options_requirement: Res<PrivacyOptionsRequirement>,
     inventory: Res<AdInventory>,
     mut pending: ResMut<PendingShow>,
-    mut purchase: MessageWriter<PurchaseRequest>,
     mut load: MessageWriter<LoadAd>,
     mut show: MessageWriter<ShowAd>,
     mut show_banner: MessageWriter<ShowBanner>,
@@ -208,9 +228,8 @@ fn on_store_ads_button_press(
             continue;
         }
         match action {
-            Action::Purchase => {
-                purchase.write(PurchaseRequest(REMOVE_ADS.into()));
-            }
+            #[cfg(target_os = "ios")]
+            Action::Purchase => {}
             Action::Interstitial if admob.can_request_ads => queue_ad(
                 AdFormat::Interstitial,
                 &inventory,
@@ -351,8 +370,8 @@ fn drive_pending(
 #[allow(clippy::too_many_arguments)]
 fn update_status(
     mut status: Query<&mut Text, With<StatusLine>>,
-    environment: Res<AppStoreEnvironment>,
-    entitlements: Res<Entitlements>,
+    #[cfg(target_os = "ios")] environment: Res<AppStoreEnvironment>,
+    #[cfg(target_os = "ios")] entitlements: Res<Entitlements>,
     inventory: Res<AdInventory>,
     admob: Res<AdmobState>,
     privacy_options: Res<PrivacyOptionsRequirement>,
@@ -363,10 +382,16 @@ fn update_status(
     let Ok(mut text) = status.single_mut() else {
         return;
     };
-    let environment = *environment;
-    let owns = entitlements.owns(REMOVE_ADS);
+    #[cfg(target_os = "ios")]
+    let store = format!(
+        "store: {} | ads-removed: {} | ",
+        *environment,
+        entitlements.owns(REMOVE_ADS)
+    );
+    #[cfg(not(target_os = "ios"))]
+    let store = "";
     text.0 = format!(
-        "store: {environment} | ads-removed: {owns} | interstitial: {:?} | banner: {} | consent: {:?} | ads-ready: {} | privacy: {:?} | att: {:?} | gc: {:?} | thermal: {:?}{}",
+        "{store}interstitial: {:?} | banner: {} | consent: {:?} | ads-ready: {} | privacy: {:?} | att: {:?} | gc: {:?} | thermal: {:?}{}",
         inventory.state(AdFormat::Interstitial),
         admob.banner_visible,
         admob.consent,

@@ -11,8 +11,8 @@
 use std::ffi::{CStr, c_char};
 
 /// Copy a backend-owned C string into an owned `String`. Null → empty.
-// Used by the store/ads getters on every platform and by the desktop fakes to
-// decode incoming ids; genuinely unused only in a gamekit-only iOS build.
+// Used by StoreKit on iOS and by ads on every target; genuinely unused only in
+// a gamekit-only build.
 #[allow(dead_code)]
 pub(crate) unsafe fn read_cstr(ptr: *const c_char) -> String {
     if ptr.is_null() {

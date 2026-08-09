@@ -1,9 +1,9 @@
 [package]
 name = "bevy_ios_toolkit"
-version = "0.3.4"
+version = "0.4.0"
 edition = "2024"
 license = "MIT"
-description = "Native iOS integrations for Bevy as ECS resources and messages: StoreKit IAP, Google AdMob ads, App Tracking Transparency, Game Center, review prompts, haptics and safe-area — each behind a feature, over a polled C-ABI Swift bridge with a testable desktop fake."
+description = "Native iOS integrations for Bevy as ECS resources and messages: StoreKit IAP, Google AdMob ads, App Tracking Transparency, Game Center, review prompts, haptics and safe-area — each behind a feature and a polled C-ABI Swift bridge, with desktop fakes only where useful."
 repository = "https://github.com/marmikshah/bevy_ios_toolkit"
 keywords = ["bevy", "ios", "storekit", "admob", "gamekit"]
 categories = ["game-development", "api-bindings"]
@@ -16,24 +16,19 @@ exclude = ["demo"]
 bevy = { version = "0.19", default-features = false }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
-tracing = { version = "0.1", optional = true }
 
 [features]
 # No integration is on by default: each module's `extern "C"` block must only
 # exist when the matching Swift shim is added to the app's Xcode target, or iOS
 # linking fails on undefined symbols. Opt in to exactly what you ship.
 default = []
-storekit = ["dep:serde", "dep:serde_json", "dep:tracing"]
+storekit = ["dep:serde", "dep:serde_json"]
 ads = ["dep:serde", "dep:serde_json"]
 platform = []
 att = []
 gamekit = []
 review = []
 all = ["storekit", "ads", "platform", "att", "gamekit", "review"]
-
-[[example]]
-name = "store"
-required-features = ["storekit"]
 
 [[example]]
 name = "ads"

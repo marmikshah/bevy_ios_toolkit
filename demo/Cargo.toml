@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 license = "MIT"
-description = "Button-per-feature demo app for bevy_ios_toolkit — runs on desktop (fakes) and iOS (real bridges)."
+description = "Button-per-feature demo app for bevy_ios_toolkit — runs supported fake integrations on desktop and native bridges on iOS."
 
 # Library so the iOS shell can link it as a staticlib and call `main_rs`; the
 # desktop binary (src/main.rs) just calls `run()`.
@@ -17,4 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 bevy = "0.19"
-bevy_ios_toolkit = { path = "..", features = ["all"] }
+bevy_ios_toolkit = { path = "..", features = ["ads", "att", "gamekit", "platform", "review"] }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+bevy_ios_toolkit = { path = "..", features = ["storekit"] }

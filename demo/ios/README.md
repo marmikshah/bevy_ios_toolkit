@@ -4,7 +4,7 @@ The native wrapper that turns the `bevy_ios_toolkit_demo` Rust staticlib into a
 real iOS app, so each toolkit feature can be tried on a device or simulator.
 
 > **⚠️ Two one-time manual steps are required before the iOS app works** — see
-> "Manual setup" below. The desktop fake needs neither.
+> "Manual setup" below. The desktop demo omits StoreKit and needs neither.
 
 ## Manual setup (required)
 
