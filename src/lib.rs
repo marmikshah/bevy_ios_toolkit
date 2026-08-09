@@ -73,9 +73,9 @@ pub mod prelude {
 
     #[cfg(feature = "storekit")]
     pub use crate::store::{
-        Entitlements, EntitlementsChanged, ProductInfo, ProductsState, ProductsUpdated,
-        PurchaseCompleted, PurchaseOutcome, PurchaseRequest, RestoreRequest, StoreConfig,
-        StoreProducts,
+        AppStoreEnvironment, Entitlements, EntitlementsChanged, ProductInfo, ProductsState,
+        ProductsUpdated, PurchaseCompleted, PurchaseOutcome, PurchaseRequest, RestoreRequest,
+        StoreConfig, StoreProducts,
     };
 
     #[cfg(feature = "ads")]

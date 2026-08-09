@@ -9,6 +9,10 @@
 use std::ffi::c_char;
 
 unsafe extern "C" {
+    /// Begin resolving `AppTransaction.shared.environment`.
+    pub fn store_environment_init();
+    /// 0 pending, 1 Xcode, 2 sandbox, 3 production, 4 unavailable, 5 unknown.
+    pub fn store_environment_state() -> i32;
     /// Begin: fetch products for the comma-separated ids and start the
     /// `Transaction.updates` listener + an entitlements refresh.
     pub fn store_init(ids: *const c_char);

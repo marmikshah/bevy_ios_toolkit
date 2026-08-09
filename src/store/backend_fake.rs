@@ -69,6 +69,14 @@ fn lock() -> std::sync::MutexGuard<'static, Fake> {
     FAKE.lock().unwrap_or_else(|p| p.into_inner())
 }
 
+pub unsafe fn store_environment_init() {}
+
+pub unsafe fn store_environment_state() -> i32 {
+    // Desktop has no App Store transaction. Consumers should use their
+    // non-production service configuration for this terminal state.
+    4
+}
+
 pub unsafe fn store_init(ids: *const c_char) {
     let ids = unsafe { read_cstr(ids) };
     let mut f = lock();

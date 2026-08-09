@@ -5,6 +5,15 @@ format loosely [Keep a Changelog](https://keepachangelog.com). Entries begin
 from the point this file was added — earlier releases live in the crates.io
 version history and the git log.
 
+## 0.3.4 — 2026-08-09
+
+### Added
+- Expose the verified StoreKit app environment as a typed Bevy resource,
+  resolved independently of purchase configuration and logged once.
+- Treat desktop, unavailable, unverified, and unknown environments explicitly
+  so consumers can reserve production service configuration for the production
+  App Store.
+
 ## 0.3.3 — 2026-08-01
 
 ### Added
