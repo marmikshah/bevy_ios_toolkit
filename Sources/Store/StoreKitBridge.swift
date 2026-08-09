@@ -15,7 +15,7 @@
 // links StoreKit (a system framework) for you.
 // Symbol prefix `store_` avoids collision with the game's own bridge.
 //
-// Deployment floor iOS 26 — StoreKit 2 (iOS 15+) needs no availability guards.
+// Deployment floor iOS 16 — AppTransaction and StoreKit 2 need no guards here.
 // All shared state lives behind an OSAllocatedUnfairLock so the async StoreKit
 // tasks and the synchronous C-ABI getters stay race-free and Swift-6 clean.
 
@@ -26,6 +26,9 @@ import os
 import StoreKit
 
 private struct StoreState {
+    var environmentStarted = false
+    // 0 pending, 1 Xcode, 2 sandbox, 3 production, 4 unavailable, 5 unknown
+    var environmentState: Int32 = 0
     var products: [Product] = []
     var productsState: Int32 = 0          // 0 loading, 1 ready, 2 failed
     var purchaseState: Int32 = 0          // 0 idle,1 buying,2 ok,3 fail,4 cancel,5 pending
@@ -45,6 +48,16 @@ final class StoreBridge: @unchecked Sendable {
     private var updatesTask: Task<Void, Never>?
 
     // MARK: Commands
+
+    func startEnvironmentResolution() {
+        let shouldStart = state.withLock { s -> Bool in
+            guard !s.environmentStarted else { return false }
+            s.environmentStarted = true
+            return true
+        }
+        guard shouldStart else { return }
+        Task { await self.resolveEnvironment() }
+    }
 
     func start(ids: [String]) {
         state.withLock { $0.productsState = 0 }
@@ -109,6 +122,31 @@ final class StoreBridge: @unchecked Sendable {
 
     // MARK: Async work
 
+    private func resolveEnvironment() async {
+        do {
+            let result = try await AppTransaction.shared
+            let value: Int32
+            switch result {
+            case .verified(let transaction):
+                let environment = transaction.environment
+                if environment == .xcode {
+                    value = 1
+                } else if environment == .sandbox {
+                    value = 2
+                } else if environment == .production {
+                    value = 3
+                } else {
+                    value = 5
+                }
+            case .unverified:
+                value = 4
+            }
+            state.withLock { $0.environmentState = value }
+        } catch {
+            state.withLock { $0.environmentState = 4 }
+        }
+    }
+
     private func loadProducts(_ ids: [String]) async {
         do {
             let fetched = try await Product.products(for: ids)
@@ -157,6 +195,7 @@ final class StoreBridge: @unchecked Sendable {
 
     // MARK: Getters (called from C)
 
+    func environmentStateValue() -> Int32 { state.withLock { $0.environmentState } }
     func productsStateValue() -> Int32 { state.withLock { $0.productsState } }
     func purchaseStateValue() -> Int32 { state.withLock { $0.purchaseState } }
     func entRevValue() -> UInt64 { state.withLock { $0.entRev } }
@@ -197,6 +236,12 @@ final class StoreBridge: @unchecked Sendable {
     }
 }
 
+@_cdecl("store_environment_init")
+public func store_environment_init() { StoreBridge.shared.startEnvironmentResolution() }
+
+@_cdecl("store_environment_state")
+public func store_environment_state() -> Int32 { StoreBridge.shared.environmentStateValue() }
+
 @_cdecl("store_init")
 public func store_init(_ ids: UnsafePointer<CChar>) {
     let list = String(cString: ids)
@@ -236,6 +281,8 @@ public func store_entitlements_json() -> UnsafePointer<CChar>? { StoreBridge.sha
 #else
 // StoreKit unavailable: linking stubs. Products report failed, nothing owned.
 
+@_cdecl("store_environment_init") public func store_environment_init() {}
+@_cdecl("store_environment_state") public func store_environment_state() -> Int32 { 4 }
 @_cdecl("store_init") public func store_init(_ ids: UnsafePointer<CChar>) {}
 @_cdecl("store_products_state") public func store_products_state() -> Int32 { 2 }
 @_cdecl("store_products_json") public func store_products_json() -> UnsafePointer<CChar>? { nil }

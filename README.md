@@ -5,7 +5,7 @@ ECS resources and messages. One crate, one plugin, a **feature per integration**
 
 | feature | module | what it bridges |
 |---------|--------|-----------------|
-| `storekit` | `store` | StoreKit 2 in-app purchases |
+| `storekit` | `store` | StoreKit app environment + in-app purchases |
 | `ads` | `ads` | Google AdMob ads + UMP (GDPR) consent |
 | `att` | `att` | App Tracking Transparency prompt |
 | `gamekit` | `gamekit` | Game Center auth, leaderboards, achievements |
@@ -77,6 +77,19 @@ fn gate(entitlements: Res<Entitlements>) {
     if entitlements.owns("com.example.app.removeads") { /* hide ads */ }
 }
 
+// Wait for StoreKit, then use production service configuration only for the
+// production App Store. Xcode, TestFlight/sandbox, and failures stay on test.
+fn choose_service_configuration(environment: Res<AppStoreEnvironment>) {
+    match *environment {
+        AppStoreEnvironment::Pending => { /* wait before initializing the SDK */ }
+        AppStoreEnvironment::Production => { /* insert production config */ }
+        AppStoreEnvironment::Xcode
+        | AppStoreEnvironment::Sandbox
+        | AppStoreEnvironment::Unavailable
+        | AppStoreEnvironment::Unknown => { /* insert test config */ }
+    }
+}
+
 // Keep this action visible only when UMP requires it. Send
 // `PresentPrivacyOptions` from the user's tap to reopen their choices.
 fn privacy_entry_point(requirement: Res<PrivacyOptionsRequirement>) {
@@ -119,6 +132,12 @@ are no files to vendor or keep in sync by hand.
    - **storekit** — define products in App Store Connect (or a StoreKit config).
 4. The `demo/ios/` XcodeGen project shows the whole wiring end to end — it
    consumes the package by relative path.
+
+`AppStoreEnvironment` resolves independently of `StoreConfig` and logs its
+terminal value once. Apple reports TestFlight as `Sandbox`; sandbox is not a
+reliable distinction between TestFlight and every development install. Use the
+resource for runtime service or ad-unit selection, but keep build-time values
+such as `GADApplicationIdentifier` in the app target configuration.
 
 ## Testing
 

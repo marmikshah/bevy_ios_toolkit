@@ -351,6 +351,7 @@ fn drive_pending(
 #[allow(clippy::too_many_arguments)]
 fn update_status(
     mut status: Query<&mut Text, With<StatusLine>>,
+    environment: Res<AppStoreEnvironment>,
     entitlements: Res<Entitlements>,
     inventory: Res<AdInventory>,
     admob: Res<AdmobState>,
@@ -362,9 +363,10 @@ fn update_status(
     let Ok(mut text) = status.single_mut() else {
         return;
     };
+    let environment = *environment;
     let owns = entitlements.owns(REMOVE_ADS);
     text.0 = format!(
-        "ads-removed: {owns} | interstitial: {:?} | banner: {} | consent: {:?} | ads-ready: {} | privacy: {:?} | att: {:?} | gc: {:?} | thermal: {:?}{}",
+        "store: {environment} | ads-removed: {owns} | interstitial: {:?} | banner: {} | consent: {:?} | ads-ready: {} | privacy: {:?} | att: {:?} | gc: {:?} | thermal: {:?}{}",
         inventory.state(AdFormat::Interstitial),
         admob.banner_visible,
         admob.consent,

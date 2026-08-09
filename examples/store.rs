@@ -21,6 +21,7 @@ fn main() {
             Update,
             (
                 buy_when_ready,
+                report_environment,
                 report_products.run_if(on_message::<ProductsUpdated>),
                 report_purchase.run_if(on_message::<PurchaseCompleted>),
                 report_entitlements.run_if(on_message::<EntitlementsChanged>),
@@ -28,6 +29,12 @@ fn main() {
             ),
         )
         .run();
+}
+
+fn report_environment(environment: Res<AppStoreEnvironment>) {
+    if environment.is_changed() && environment.is_resolved() {
+        println!("App Store environment: {}", *environment);
+    }
 }
 
 fn buy_when_ready(

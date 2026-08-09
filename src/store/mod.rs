@@ -1,19 +1,24 @@
 //! StoreKit 2 in-app purchases as Bevy resources + messages.
 //!
 //! Flow:
-//! 1. Insert [`StoreConfig`] with your product ids. The plugin calls into the
+//! 1. Read [`AppStoreEnvironment`] to choose non-production service
+//!    configuration for Xcode, sandbox, or unavailable execution. Wait while
+//!    it is [`AppStoreEnvironment::Pending`].
+//! 2. Insert [`StoreConfig`] with your product ids. The plugin calls into the
 //!    backend once, which fetches products and the current entitlements.
-//! 2. Read [`StoreProducts`] for prices/titles to render your store UI.
-//! 3. Send [`PurchaseRequest`] / [`RestoreRequest`] to act.
-//! 4. React to [`PurchaseCompleted`] / [`EntitlementsChanged`], or just read
+//! 3. Read [`StoreProducts`] for prices/titles to render your store UI.
+//! 4. Send [`PurchaseRequest`] / [`RestoreRequest`] to act.
+//! 5. React to [`PurchaseCompleted`] / [`EntitlementsChanged`], or just read
 //!    the [`Entitlements`] resource — `owns(id)` is the source of truth and
 //!    covers fresh purchases, restores, and already-owned-on-relaunch alike.
 
 use std::collections::HashSet;
 use std::ffi::CString;
+use std::fmt;
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
+use tracing::{info, warn};
 
 use crate::ffi::read_cstr;
 
@@ -55,6 +60,51 @@ pub enum PurchaseOutcome {
     Cancelled,
     /// Deferred — e.g. Ask to Buy. Entitlement may arrive later via updates.
     Pending,
+}
+
+/// The environment reported by the verified StoreKit 2 app transaction.
+///
+/// TestFlight uses [`Sandbox`](Self::Sandbox). Xcode without a StoreKit
+/// configuration can also report sandbox, so this is deliberately not an
+/// install-source detector. Wait for a terminal value, then select production
+/// service configuration only for [`Production`](Self::Production).
+///
+/// <https://developer.apple.com/documentation/storekit/apptransaction/environment>
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum AppStoreEnvironment {
+    /// `AppTransaction.shared` is still resolving.
+    #[default]
+    Pending,
+    /// StoreKit testing configured by Xcode.
+    Xcode,
+    /// The App Store sandbox, including TestFlight.
+    Sandbox,
+    /// The production App Store.
+    Production,
+    /// The app transaction could not be loaded or verified.
+    Unavailable,
+    /// StoreKit returned an environment this toolkit does not yet recognize.
+    Unknown,
+}
+
+impl AppStoreEnvironment {
+    /// Whether StoreKit has produced a terminal result.
+    pub const fn is_resolved(self) -> bool {
+        !matches!(self, Self::Pending)
+    }
+}
+
+impl fmt::Display for AppStoreEnvironment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Pending => "pending",
+            Self::Xcode => "xcode",
+            Self::Sandbox => "sandbox",
+            Self::Production => "production",
+            Self::Unavailable => "unavailable",
+            Self::Unknown => "unknown",
+        })
+    }
 }
 
 // ---------- Resources ----------
@@ -125,6 +175,25 @@ pub struct EntitlementsChanged;
 
 // ---------- Safe backend wrappers ----------
 
+fn init_environment() {
+    unsafe { backend::store_environment_init() };
+}
+
+fn environment() -> AppStoreEnvironment {
+    environment_from_raw(unsafe { backend::store_environment_state() })
+}
+
+fn environment_from_raw(value: i32) -> AppStoreEnvironment {
+    match value {
+        0 => AppStoreEnvironment::Pending,
+        1 => AppStoreEnvironment::Xcode,
+        2 => AppStoreEnvironment::Sandbox,
+        3 => AppStoreEnvironment::Production,
+        4 => AppStoreEnvironment::Unavailable,
+        _ => AppStoreEnvironment::Unknown,
+    }
+}
+
 fn init(ids: &[String]) {
     let Ok(joined) = CString::new(ids.join(",")) else {
         return;
@@ -186,6 +255,7 @@ fn fetch_entitlements() -> Vec<String> {
 
 #[derive(Resource)]
 struct StorePoll {
+    environment_inited: bool,
     inited: bool,
     last_products: ProductsState,
     ent_rev: u64,
@@ -194,6 +264,7 @@ struct StorePoll {
 impl Default for StorePoll {
     fn default() -> Self {
         Self {
+            environment_inited: false,
             inited: false,
             last_products: ProductsState::Loading,
             ent_rev: 0,
@@ -205,7 +276,8 @@ pub struct StorePlugin;
 
 impl Plugin for StorePlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<StoreProducts>()
+        app.init_resource::<AppStoreEnvironment>()
+            .init_resource::<StoreProducts>()
             .init_resource::<Entitlements>()
             .init_resource::<StorePoll>()
             .add_message::<PurchaseRequest>()
@@ -213,7 +285,57 @@ impl Plugin for StorePlugin {
             .add_message::<ProductsUpdated>()
             .add_message::<PurchaseCompleted>()
             .add_message::<EntitlementsChanged>()
-            .add_systems(Update, (init_once, pump_requests, poll_store).chain());
+            .add_systems(
+                Update,
+                (
+                    init_environment_once,
+                    poll_environment,
+                    init_once,
+                    pump_requests,
+                    poll_store,
+                )
+                    .chain(),
+            );
+    }
+}
+
+/// Start environment resolution even when the consumer has no products.
+fn init_environment_once(mut poll: ResMut<StorePoll>) {
+    if poll.environment_inited {
+        return;
+    }
+    init_environment();
+    poll.environment_inited = true;
+}
+
+/// Publish and log the immutable terminal environment exactly once.
+fn poll_environment(mut current: ResMut<AppStoreEnvironment>) {
+    if current.is_resolved() {
+        return;
+    }
+    let resolved = environment();
+    if !resolved.is_resolved() {
+        return;
+    }
+
+    *current = resolved;
+    match resolved {
+        AppStoreEnvironment::Xcode
+        | AppStoreEnvironment::Sandbox
+        | AppStoreEnvironment::Production => {
+            info!("App Store environment resolved: {resolved}");
+        }
+        AppStoreEnvironment::Unavailable => {
+            warn!(
+                "App Store environment resolved: unavailable; use non-production service configuration"
+            );
+        }
+        AppStoreEnvironment::Unknown => {
+            warn!(
+                "App Store environment resolved: unknown; use non-production service configuration"
+            );
+        }
+        AppStoreEnvironment::Pending => {}
     }
 }
 
@@ -298,6 +420,31 @@ mod tests {
             *fired = true;
             requests.write(PurchaseRequest("com.test.removeads".into()));
         }
+    }
+
+    #[test]
+    fn environment_wire_values_are_explicit_and_fail_safe() {
+        assert_eq!(environment_from_raw(0), AppStoreEnvironment::Pending);
+        assert_eq!(environment_from_raw(1), AppStoreEnvironment::Xcode);
+        assert_eq!(environment_from_raw(2), AppStoreEnvironment::Sandbox);
+        assert_eq!(environment_from_raw(3), AppStoreEnvironment::Production);
+        assert_eq!(environment_from_raw(4), AppStoreEnvironment::Unavailable);
+        assert_eq!(environment_from_raw(5), AppStoreEnvironment::Unknown);
+        assert_eq!(environment_from_raw(i32::MAX), AppStoreEnvironment::Unknown);
+    }
+
+    #[test]
+    fn fake_resolves_environment_without_store_config() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_plugins(StorePlugin);
+
+        app.update();
+
+        assert_eq!(
+            *app.world().resource::<AppStoreEnvironment>(),
+            AppStoreEnvironment::Unavailable
+        );
     }
 
     /// Drives the whole plugin against the fake backend: config -> products

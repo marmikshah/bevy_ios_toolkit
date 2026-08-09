@@ -78,8 +78,9 @@ xcodebuild -project IosToolkitDemo.xcodeproj \
 
 ## What the buttons do
 
-One button per feature; the status line at the top reflects live state
-(entitlement owned, ad inventory, banner, consent, ATT status, Game Center auth):
+One button per feature; the status line at the top reflects live state (App
+Store environment, entitlement owned, ad inventory, banner, consent, ATT
+status, Game Center auth):
 
 - **Buy: Remove Ads** — StoreKit purchase of `iap.playground.removeads`.
 - **Interstitial Ad** / **Rewarded Ad** — load *and* present from one tap.
