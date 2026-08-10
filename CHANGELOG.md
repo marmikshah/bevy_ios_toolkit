@@ -5,6 +5,18 @@ format loosely [Keep a Changelog](https://keepachangelog.com). Entries begin
 from the point this file was added — earlier releases live in the crates.io
 version history and the git log.
 
+## 0.4.1 — 2026-08-10
+
+### Added
+- Expose the current StoreKit purchase or restore operation through the typed
+  `StoreActivity` resource so consumers can render native progress.
+- Publish `RestoreCompleted` with an explicit success or failure outcome after
+  the entitlement refresh finishes.
+
+### Fixed
+- Report `AppStore.sync()` failures instead of silently discarding them.
+- Suppress overlapping purchase and restore requests while StoreKit is busy.
+
 ## 0.4.0 — 2026-08-09
 
 ### Added

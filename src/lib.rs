@@ -56,6 +56,10 @@ use bevy::prelude::*;
 #[path = "store/environment.rs"]
 mod store_environment;
 
+#[cfg(all(test, feature = "storekit"))]
+#[path = "store/operation.rs"]
+mod store_operation_tests;
+
 #[cfg(any(
     all(feature = "storekit", any(target_os = "ios", doc)),
     feature = "ads",
@@ -87,8 +91,8 @@ pub mod prelude {
     #[cfg(all(feature = "storekit", any(target_os = "ios", doc)))]
     pub use crate::store::{
         AppStoreEnvironment, Entitlements, EntitlementsChanged, ProductInfo, ProductsState,
-        ProductsUpdated, PurchaseCompleted, PurchaseOutcome, PurchaseRequest, RestoreRequest,
-        StoreConfig, StoreProducts,
+        ProductsUpdated, PurchaseCompleted, PurchaseOutcome, PurchaseRequest, RestoreCompleted,
+        RestoreOutcome, RestoreRequest, StoreActivity, StoreConfig, StoreProducts,
     };
 
     #[cfg(feature = "ads")]

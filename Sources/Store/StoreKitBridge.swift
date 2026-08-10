@@ -33,6 +33,7 @@ private struct StoreState {
     var productsState: Int32 = 0          // 0 loading, 1 ready, 2 failed
     var purchaseState: Int32 = 0          // 0 idle,1 buying,2 ok,3 fail,4 cancel,5 pending
     var purchaseProduct: String = ""
+    var restoreState: Int32 = 0           // 0 idle, 1 restoring, 2 success, 3 failed
     var entitled: Set<String> = []
     var entRev: UInt64 = 0
     // Owned C-string buffers; freed when regenerated.
@@ -114,10 +115,26 @@ final class StoreBridge: @unchecked Sendable {
     }
 
     func restore() {
-        Task {
-            try? await AppStore.sync()
-            await self.refreshEntitlements()
+        let shouldStart = state.withLock { s -> Bool in
+            guard s.restoreState == 0 else { return false }
+            s.restoreState = 1
+            return true
         }
+        guard shouldStart else { return }
+        Task {
+            do {
+                try await AppStore.sync()
+                await self.refreshEntitlements()
+                self.setRestoreState(2)
+            } catch {
+                NSLog("[store] restore failed: %@", String(describing: error))
+                self.setRestoreState(3)
+            }
+        }
+    }
+
+    func clearRestore() {
+        state.withLock { $0.restoreState = 0 }
     }
 
     // MARK: Async work
@@ -199,11 +216,16 @@ final class StoreBridge: @unchecked Sendable {
         state.withLock { $0.purchaseState = value }
     }
 
+    private func setRestoreState(_ value: Int32) {
+        state.withLock { $0.restoreState = value }
+    }
+
     // MARK: Getters (called from C)
 
     func environmentStateValue() -> Int32 { state.withLock { $0.environmentState } }
     func productsStateValue() -> Int32 { state.withLock { $0.productsState } }
     func purchaseStateValue() -> Int32 { state.withLock { $0.purchaseState } }
+    func restoreStateValue() -> Int32 { state.withLock { $0.restoreState } }
     func entRevValue() -> UInt64 { state.withLock { $0.entRev } }
 
     // withLockUnchecked: the result is a raw pointer (not Sendable), but it's
@@ -278,6 +300,12 @@ public func store_purchase_clear() { StoreBridge.shared.clearPurchase() }
 @_cdecl("store_restore")
 public func store_restore() { StoreBridge.shared.restore() }
 
+@_cdecl("store_restore_state")
+public func store_restore_state() -> Int32 { StoreBridge.shared.restoreStateValue() }
+
+@_cdecl("store_restore_clear")
+public func store_restore_clear() { StoreBridge.shared.clearRestore() }
+
 @_cdecl("store_entitlements_rev")
 public func store_entitlements_rev() -> UInt64 { StoreBridge.shared.entRevValue() }
 
@@ -286,6 +314,15 @@ public func store_entitlements_json() -> UnsafePointer<CChar>? { StoreBridge.sha
 
 #else
 // StoreKit unavailable: linking stubs. Products report failed, nothing owned.
+
+private final class UnavailableStoreBridge: @unchecked Sendable {
+    static let shared = UnavailableStoreBridge()
+    private let restoreState = OSAllocatedUnfairLock(initialState: Int32(0))
+
+    func restore() { restoreState.withLock { $0 = 3 } }
+    func clearRestore() { restoreState.withLock { $0 = 0 } }
+    func restoreStateValue() -> Int32 { restoreState.withLock { $0 } }
+}
 
 @_cdecl("store_environment_init")
 public func store_environment_init() {
@@ -299,7 +336,11 @@ public func store_environment_init() {
 @_cdecl("store_purchase_state") public func store_purchase_state() -> Int32 { 0 }
 @_cdecl("store_purchase_product") public func store_purchase_product() -> UnsafePointer<CChar>? { nil }
 @_cdecl("store_purchase_clear") public func store_purchase_clear() {}
-@_cdecl("store_restore") public func store_restore() {}
+@_cdecl("store_restore") public func store_restore() { UnavailableStoreBridge.shared.restore() }
+@_cdecl("store_restore_state")
+public func store_restore_state() -> Int32 { UnavailableStoreBridge.shared.restoreStateValue() }
+@_cdecl("store_restore_clear")
+public func store_restore_clear() { UnavailableStoreBridge.shared.clearRestore() }
 @_cdecl("store_entitlements_rev") public func store_entitlements_rev() -> UInt64 { 0 }
 @_cdecl("store_entitlements_json") public func store_entitlements_json() -> UnsafePointer<CChar>? { nil }
 
