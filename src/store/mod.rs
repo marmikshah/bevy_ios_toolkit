@@ -7,10 +7,11 @@
 //! 2. Insert [`StoreConfig`] with your product ids. The plugin calls into the
 //!    backend once, which fetches products and the current entitlements.
 //! 3. Read [`StoreProducts`] for prices/titles to render your store UI.
-//! 4. Send [`PurchaseRequest`] / [`RestoreRequest`] to act.
-//! 5. React to [`PurchaseCompleted`] / [`EntitlementsChanged`], or just read
-//!    the [`Entitlements`] resource — `owns(id)` is the source of truth and
-//!    covers fresh purchases, restores, and already-owned-on-relaunch alike.
+//! 4. Send [`PurchaseRequest`] / [`RestoreRequest`] to act and project
+//!    [`StoreActivity`] into visible progress while StoreKit is working.
+//! 5. React to [`PurchaseCompleted`], [`RestoreCompleted`], or
+//!    [`EntitlementsChanged`]. [`Entitlements::owns`] remains the source of
+//!    truth across fresh purchases, restores, and already-owned relaunches.
 
 use std::collections::HashSet;
 use std::ffi::CString;
@@ -24,6 +25,10 @@ use crate::store_environment::environment_from_raw;
 
 #[path = "backend_ios.rs"]
 mod backend;
+mod operation;
+
+pub use operation::StoreActivity;
+use operation::{finish_activity, start_purchase, start_restore};
 
 // ---------- Types ----------
 
@@ -55,6 +60,13 @@ pub enum PurchaseOutcome {
     Cancelled,
     /// Deferred — e.g. Ask to Buy. Entitlement may arrive later via updates.
     Pending,
+}
+
+/// Terminal result of an explicit App Store synchronization.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RestoreOutcome {
+    Success,
+    Failed,
 }
 
 // ---------- Resources ----------
@@ -118,6 +130,12 @@ pub struct PurchaseCompleted {
     pub outcome: PurchaseOutcome,
 }
 
+/// Emitted once when an explicit restore reaches a terminal result.
+#[derive(Message, Clone, Debug)]
+pub struct RestoreCompleted {
+    pub outcome: RestoreOutcome,
+}
+
 /// Emitted when the entitlement set changes. Read [`Entitlements`] for the new
 /// state.
 #[derive(Message, Clone, Debug)]
@@ -153,11 +171,12 @@ fn products() -> Vec<ProductInfo> {
     serde_json::from_str(&json).unwrap_or_default()
 }
 
-fn purchase(id: &str) {
+fn purchase(id: &str) -> bool {
     let Ok(id) = CString::new(id) else {
-        return;
+        return false;
     };
     unsafe { backend::store_purchase(id.as_ptr()) };
+    true
 }
 
 /// Returns the terminal outcome (if any) and the product it refers to.
@@ -179,6 +198,18 @@ fn purchase_clear() {
 
 fn restore() {
     unsafe { backend::store_restore() };
+}
+
+fn restore_result() -> Option<RestoreOutcome> {
+    match unsafe { backend::store_restore_state() } {
+        2 => Some(RestoreOutcome::Success),
+        3 => Some(RestoreOutcome::Failed),
+        _ => None,
+    }
+}
+
+fn restore_clear() {
+    unsafe { backend::store_restore_clear() };
 }
 
 fn entitlements_rev() -> u64 {
@@ -215,11 +246,13 @@ impl Plugin for StorePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<StoreProducts>()
             .init_resource::<Entitlements>()
+            .init_resource::<StoreActivity>()
             .init_resource::<StorePoll>()
             .add_message::<PurchaseRequest>()
             .add_message::<RestoreRequest>()
             .add_message::<ProductsUpdated>()
             .add_message::<PurchaseCompleted>()
+            .add_message::<RestoreCompleted>()
             .add_message::<EntitlementsChanged>()
             .add_systems(Update, (init_once, pump_requests, poll_store).chain());
 
@@ -267,16 +300,30 @@ fn init_once(config: Option<Res<StoreConfig>>, mut poll: ResMut<StorePoll>) {
 /// Forward consumer requests to the backend.
 fn pump_requests(
     poll: Res<StorePoll>,
+    mut activity: ResMut<StoreActivity>,
     mut buys: MessageReader<PurchaseRequest>,
     mut restores: MessageReader<RestoreRequest>,
+    mut purchase_completed: MessageWriter<PurchaseCompleted>,
 ) {
     if !poll.inited {
         return;
     }
     for buy in buys.read() {
-        purchase(&buy.0);
+        if !start_purchase(&mut activity, &buy.0) {
+            continue;
+        }
+        if !purchase(&buy.0) {
+            finish_activity(&mut activity);
+            purchase_completed.write(PurchaseCompleted {
+                product_id: buy.0.clone(),
+                outcome: PurchaseOutcome::Failed,
+            });
+        }
     }
     for _ in restores.read() {
+        if !start_restore(&mut activity) {
+            continue;
+        }
         restore();
     }
 }
@@ -286,8 +333,10 @@ fn poll_store(
     mut poll: ResMut<StorePoll>,
     mut store_products: ResMut<StoreProducts>,
     mut entitlements: ResMut<Entitlements>,
+    mut activity: ResMut<StoreActivity>,
     mut products_updated: MessageWriter<ProductsUpdated>,
     mut purchase_completed: MessageWriter<PurchaseCompleted>,
+    mut restore_completed: MessageWriter<RestoreCompleted>,
     mut entitlements_changed: MessageWriter<EntitlementsChanged>,
 ) {
     if !poll.inited {
@@ -304,7 +353,18 @@ fn poll_store(
         products_updated.write(ProductsUpdated);
     }
 
+    // Both native success paths refresh entitlements before publishing their
+    // terminal state. Project that truth first so completion consumers observe
+    // the corresponding ownership snapshot in the same frame.
+    let rev = entitlements_rev();
+    if rev != poll.ent_rev {
+        poll.ent_rev = rev;
+        entitlements.owned = fetch_entitlements().into_iter().collect();
+        entitlements_changed.write(EntitlementsChanged);
+    }
+
     if let Some((outcome, product_id)) = purchase_result() {
+        finish_activity(&mut activity);
         if !product_id.is_empty() {
             purchase_completed.write(PurchaseCompleted {
                 product_id,
@@ -314,10 +374,9 @@ fn poll_store(
         purchase_clear();
     }
 
-    let rev = entitlements_rev();
-    if rev != poll.ent_rev {
-        poll.ent_rev = rev;
-        entitlements.owned = fetch_entitlements().into_iter().collect();
-        entitlements_changed.write(EntitlementsChanged);
+    if let Some(outcome) = restore_result() {
+        finish_activity(&mut activity);
+        restore_completed.write(RestoreCompleted { outcome });
+        restore_clear();
     }
 }

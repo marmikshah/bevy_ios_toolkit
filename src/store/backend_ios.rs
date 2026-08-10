@@ -30,6 +30,10 @@ unsafe extern "C" {
     pub fn store_purchase_clear();
     /// Restore purchases (`AppStore.sync()` + entitlements refresh).
     pub fn store_restore();
+    /// 0 idle, 1 restoring, 2 success, 3 failed.
+    pub fn store_restore_state() -> i32;
+    /// Ack a terminal restore result; resets restore_state to idle.
+    pub fn store_restore_clear();
     /// Bumped whenever the entitlement set changes; poll cheaply, parse only on change.
     pub fn store_entitlements_rev() -> u64;
     /// JSON `["id", ...]` of currently-entitled product ids.

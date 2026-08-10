@@ -70,7 +70,7 @@ pub fn run() {
     app.insert_resource(StoreConfig {
         product_ids: vec![REMOVE_ADS.into()],
     })
-    .add_systems(Update, on_purchase_button_press);
+    .add_systems(Update, on_store_button_press);
 
     app.run();
 }
@@ -80,6 +80,8 @@ pub fn run() {
 enum Action {
     #[cfg(target_os = "ios")]
     Purchase,
+    #[cfg(target_os = "ios")]
+    Restore,
     Interstitial,
     Rewarded,
     ToggleBanner,
@@ -95,6 +97,8 @@ enum Action {
 const ROWS: &[(&str, Action)] = &[
     #[cfg(target_os = "ios")]
     ("Buy: Remove Ads", Action::Purchase),
+    #[cfg(target_os = "ios")]
+    ("Restore Purchases", Action::Restore),
     ("Interstitial Ad", Action::Interstitial),
     ("Rewarded Ad", Action::Rewarded),
     ("Toggle Banner", Action::ToggleBanner),
@@ -195,15 +199,26 @@ fn restyle_buttons(
     }
 }
 
-/// Forward an iOS purchase button press to StoreKit.
+/// Forward one explicit iOS store action while the native owner is idle.
 #[cfg(target_os = "ios")]
-fn on_purchase_button_press(
+fn on_store_button_press(
     buttons: Query<(&Interaction, &Action), Changed<Interaction>>,
+    activity: Res<StoreActivity>,
     mut purchase: MessageWriter<PurchaseRequest>,
+    mut restore: MessageWriter<RestoreRequest>,
 ) {
     for (interaction, action) in buttons.iter() {
-        if *interaction == Interaction::Pressed && *action == Action::Purchase {
-            purchase.write(PurchaseRequest(REMOVE_ADS.into()));
+        if *interaction != Interaction::Pressed || !activity.is_idle() {
+            continue;
+        }
+        match action {
+            Action::Purchase => {
+                purchase.write(PurchaseRequest(REMOVE_ADS.into()));
+            }
+            Action::Restore => {
+                restore.write(RestoreRequest);
+            }
+            _ => {}
         }
     }
 }
@@ -229,7 +244,7 @@ fn on_ads_button_press(
         }
         match action {
             #[cfg(target_os = "ios")]
-            Action::Purchase => {}
+            Action::Purchase | Action::Restore => {}
             Action::Interstitial if admob.can_request_ads => queue_ad(
                 AdFormat::Interstitial,
                 &inventory,
@@ -372,6 +387,7 @@ fn update_status(
     mut status: Query<&mut Text, With<StatusLine>>,
     #[cfg(target_os = "ios")] environment: Res<AppStoreEnvironment>,
     #[cfg(target_os = "ios")] entitlements: Res<Entitlements>,
+    #[cfg(target_os = "ios")] activity: Res<StoreActivity>,
     inventory: Res<AdInventory>,
     admob: Res<AdmobState>,
     privacy_options: Res<PrivacyOptionsRequirement>,
@@ -384,8 +400,9 @@ fn update_status(
     };
     #[cfg(target_os = "ios")]
     let store = format!(
-        "store: {} | ads-removed: {} | ",
+        "store: {} | activity: {:?} | ads-removed: {} | ",
         *environment,
+        *activity,
         entitlements.owns(REMOVE_ADS)
     );
     #[cfg(not(target_os = "ios"))]

@@ -83,6 +83,8 @@ Store environment, entitlement owned, ad inventory, banner, consent, ATT
 status, Game Center auth):
 
 - **Buy: Remove Ads** — StoreKit purchase of `iap.playground.removeads`.
+- **Restore Purchases** — explicit App Store synchronization with visible
+  in-flight state.
 - **Interstitial Ad** / **Rewarded Ad** — load *and* present from one tap.
 - **Toggle Banner** — show / hide the banner.
 - **Request Ad Consent** — UMP consent form.

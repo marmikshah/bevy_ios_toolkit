@@ -85,6 +85,27 @@ fn gate(entitlements: Res<Entitlements>) {
     if entitlements.owns("com.example.app.removeads") { /* hide ads */ }
 }
 
+// Keep progress visible while StoreKit is working. Presentation stays yours.
+#[cfg(target_os = "ios")]
+fn store_progress(activity: Res<StoreActivity>) {
+    match &*activity {
+        StoreActivity::Idle => { /* enable store actions */ }
+        StoreActivity::Purchasing { product_id } => { /* show purchase progress */ }
+        StoreActivity::Restoring => { /* show restore progress */ }
+    }
+}
+
+// Restore completes only after AppStore.sync() and entitlement refresh finish.
+#[cfg(target_os = "ios")]
+fn restore_result(mut completed: MessageReader<RestoreCompleted>) {
+    for completed in completed.read() {
+        match completed.outcome {
+            RestoreOutcome::Success => { /* read Entitlements for restored access */ }
+            RestoreOutcome::Failed => { /* offer an explicit retry */ }
+        }
+    }
+}
+
 // Wait for StoreKit, then use production service configuration only for the
 // production App Store. Xcode, TestFlight/sandbox, and failures stay on test.
 #[cfg(target_os = "ios")]
@@ -150,6 +171,12 @@ TestFlight as `Sandbox`, but sandbox is not a reliable distinction between
 TestFlight and every development install. Use the resource for runtime service
 or ad-unit selection, but keep build-time values such as
 `GADApplicationIdentifier` in the app target configuration.
+
+`StoreActivity` reports whether a purchase or explicit restore is in flight.
+Use it to disable duplicate actions and keep progress visible until
+`PurchaseCompleted` or `RestoreCompleted` arrives. Ownership never comes from
+the operation result: always read `Entitlements`, including during launch-time
+reconciliation when no user-facing success message should be inferred.
 
 ## Testing
 
