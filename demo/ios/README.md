@@ -11,20 +11,15 @@ real iOS app, so each toolkit feature can be tried on a device or simulator.
 Two things only you can provide; the demo can't ship them for you.
 
 **1. Set your Apple Developer Team ID.** `DEVELOPMENT_TEAM` in `project.yml` is
-empty by default, so the build fails with a code-signing error (*"Signing for
-'IosToolkitDemo' requires a development team"*) — including on the Simulator,
-because the Game Center entitlement forces signing. Set `DEVELOPMENT_TEAM` to
-your team id in `project.yml`, regenerate with `xcodegen generate` (or pass
-`DEVELOPMENT_TEAM=XXXXXXXXXX` to `xcodebuild`). You'll likely also change
-`PRODUCT_BUNDLE_IDENTIFIER` to a bundle id your team owns.
+empty by default, so the build fails with a code-signing error. Pass your team
+to `xcodebuild` or select it in Xcode. The committed bundle identifier belongs
+to the published playground app and must remain unchanged for live StoreKit.
 
 **2. Provide the in-app purchase product.** The "Buy: Remove Ads" button requests
-`iap.playground.removeads`; StoreKit returns nothing until that id exists. Either:
-- add a **StoreKit configuration file** to the scheme (Product → Scheme → Edit
-  Scheme → Run → Options → StoreKit Configuration) with a non-consumable product
-  `iap.playground.removeads` — works on the Simulator, no account needed; **or**
-- create the product in **App Store Connect** and test with a sandbox account on
-  a device.
+`iap.playground.removeads`, which is configured for the published playground
+app. Run the signed app on a physical device with a sandbox account. Do not add
+a StoreKit configuration file: this app exists to verify the real App Store
+catalogue, localized price, purchase, relaunch, foreground, and restore flows.
 
 Everything else runs without setup: ads use Google's **test** ids (they fill
 without risking a policy strike), and ATT / haptics / review need nothing. Game
@@ -78,9 +73,9 @@ xcodebuild -project IosToolkitDemo.xcodeproj \
 
 ## What the buttons do
 
-One button per feature; the status line at the top reflects live state (App
-Store environment, entitlement owned, ad inventory, banner, consent, ATT
-status, Game Center auth):
+One button per feature; the status line at the top reflects the live App Store
+environment, localized price, entitlement readiness and ownership, StoreKit
+activity and terminal result, plus the other toolkit integrations:
 
 - **Buy: Remove Ads** — StoreKit purchase of `iap.playground.removeads`.
 - **Restore Purchases** — explicit App Store synchronization with visible

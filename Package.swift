@@ -73,6 +73,5 @@ let package = Package(
             name: "Review",
             linkerSettings: [.linkedFramework("StoreKit")]
         ),
-        .testTarget(name: "StoreTests", dependencies: ["Store"]),
     ]
 )

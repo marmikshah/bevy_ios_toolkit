@@ -56,6 +56,15 @@ use bevy::prelude::*;
 #[path = "store/environment.rs"]
 mod store_environment;
 
+#[cfg(all(feature = "storekit", any(target_os = "ios", doc, test)))]
+#[path = "store/operation.rs"]
+mod store_operation;
+
+#[cfg(all(feature = "storekit", any(target_os = "ios", doc, test)))]
+#[path = "store/state.rs"]
+#[cfg_attr(test, allow(dead_code))]
+mod store_state;
+
 #[cfg(any(
     all(feature = "storekit", any(target_os = "ios", doc)),
     feature = "ads",
@@ -63,7 +72,7 @@ mod store_environment;
 ))]
 mod ffi;
 
-#[cfg(all(feature = "storekit", any(target_os = "ios", doc, test)))]
+#[cfg(all(feature = "storekit", any(target_os = "ios", doc)))]
 pub mod store;
 
 #[cfg(feature = "ads")]
@@ -84,7 +93,7 @@ pub mod review;
 pub mod prelude {
     pub use crate::IosPlugin;
 
-    #[cfg(all(feature = "storekit", any(target_os = "ios", doc, test)))]
+    #[cfg(all(feature = "storekit", any(target_os = "ios", doc)))]
     pub use crate::store::{
         AppStoreEnvironment, Entitlements, EntitlementsChanged, EntitlementsState, ProductInfo,
         ProductsState, ProductsUpdated, PurchaseCompleted, PurchaseOutcome, PurchaseRequest,

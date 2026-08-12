@@ -13,8 +13,8 @@ version history and the git log.
   the account owns no products.
 - Reconcile verified entitlements on launch, foreground activation, purchase,
   restore, and transaction updates through one serialized native owner.
-- Test initial empty ownership, revocation, failures, operation ordering,
-  localized prices, and entitlement triggers that overlap an in-flight read.
+- Show the real localized catalogue price, entitlement readiness and ownership,
+  operation state, and terminal result in the signed playground app.
 
 ### Fixed
 - Prevent a stale persisted ownership decision from surviving forever because
