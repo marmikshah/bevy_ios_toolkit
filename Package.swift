@@ -42,7 +42,7 @@ let package = Package(
         ),
         .target(
             name: "Store",
-            linkerSettings: [.linkedFramework("StoreKit")]
+            linkerSettings: [.linkedFramework("StoreKit"), .linkedFramework("UIKit")]
         ),
         .target(
             name: "Ads",
@@ -73,5 +73,6 @@ let package = Package(
             name: "Review",
             linkerSettings: [.linkedFramework("StoreKit")]
         ),
+        .testTarget(name: "StoreTests", dependencies: ["Store"]),
     ]
 )

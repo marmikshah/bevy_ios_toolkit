@@ -9,47 +9,33 @@
 //! 3. Read [`StoreProducts`] for prices/titles to render your store UI.
 //! 4. Send [`PurchaseRequest`] / [`RestoreRequest`] to act and project
 //!    [`StoreActivity`] into visible progress while StoreKit is working.
-//! 5. React to [`PurchaseCompleted`], [`RestoreCompleted`], or
-//!    [`EntitlementsChanged`]. [`Entitlements::owns`] remains the source of
-//!    truth across fresh purchases, restores, and already-owned relaunches.
+//! 5. Keep purchase, ad, and tracking decisions closed until
+//!    [`Entitlements::is_ready`]. React to [`EntitlementsChanged`] for the
+//!    first authoritative snapshot and every later ownership/state change.
+//!    [`Entitlements::owns`] then remains runtime truth across fresh purchases,
+//!    restores, foreground reconciliation, and already-owned relaunches.
 
-use std::collections::HashSet;
-use std::ffi::CString;
+use std::ffi::{CStr, CString, c_char};
 
-use bevy::prelude::*;
-use serde::{Deserialize, Serialize};
-
-use crate::ffi::read_cstr;
 pub use crate::store_environment::AppStoreEnvironment;
 use crate::store_environment::environment_from_raw;
+use bevy::prelude::*;
 
+#[cfg(not(test))]
 #[path = "backend_ios.rs"]
 mod backend;
+#[cfg(test)]
+#[path = "backend_test.rs"]
+mod backend;
 mod operation;
+mod state;
 
 pub use operation::StoreActivity;
 use operation::{finish_activity, start_purchase, start_restore};
+use state::decode_entitlement_snapshot;
+pub use state::{Entitlements, EntitlementsState, ProductInfo, ProductsState, StoreProducts};
 
 // ---------- Types ----------
-
-/// One purchasable product, as reported by StoreKit (localized price/title).
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ProductInfo {
-    pub id: String,
-    pub display_name: String,
-    /// Localized, currency-formatted price string ("$0.99", "₹89").
-    pub display_price: String,
-    pub description: String,
-}
-
-/// Loading state of the product catalogue.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum ProductsState {
-    #[default]
-    Loading,
-    Ready,
-    Failed,
-}
 
 /// Terminal result of a purchase attempt.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -76,37 +62,6 @@ pub enum RestoreOutcome {
 #[derive(Resource, Clone, Default)]
 pub struct StoreConfig {
     pub product_ids: Vec<String>,
-}
-
-/// The fetched catalogue. Mirrors the backend; read-only to consumers.
-#[derive(Resource, Default)]
-pub struct StoreProducts {
-    pub state: ProductsState,
-    pub items: Vec<ProductInfo>,
-}
-
-impl StoreProducts {
-    pub fn get(&self, id: &str) -> Option<&ProductInfo> {
-        self.items.iter().find(|p| p.id == id)
-    }
-}
-
-/// The set of currently-entitled product ids (non-consumables + active subs).
-/// `owns(id)` is the gate to use everywhere — it stays correct across purchase,
-/// restore, and relaunch.
-#[derive(Resource, Default)]
-pub struct Entitlements {
-    owned: HashSet<String>,
-}
-
-impl Entitlements {
-    pub fn owns(&self, id: &str) -> bool {
-        self.owned.contains(id)
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &String> {
-        self.owned.iter()
-    }
 }
 
 // ---------- Messages ----------
@@ -136,8 +91,8 @@ pub struct RestoreCompleted {
     pub outcome: RestoreOutcome,
 }
 
-/// Emitted when the entitlement set changes. Read [`Entitlements`] for the new
-/// state.
+/// Emitted when entitlement readiness, failure, or verified ownership changes.
+/// The first authoritative empty snapshot emits this message too.
 #[derive(Message, Clone, Debug)]
 pub struct EntitlementsChanged;
 
@@ -166,9 +121,9 @@ fn products_state() -> ProductsState {
     }
 }
 
-fn products() -> Vec<ProductInfo> {
-    let json = unsafe { read_cstr(backend::store_products_json()) };
-    serde_json::from_str(&json).unwrap_or_default()
+fn products() -> Result<Vec<ProductInfo>, serde_json::Error> {
+    let json = unsafe { take_string(backend::store_products_json()) };
+    serde_json::from_str(&json)
 }
 
 fn purchase(id: &str) -> bool {
@@ -188,7 +143,7 @@ fn purchase_result() -> Option<(PurchaseOutcome, String)> {
         5 => PurchaseOutcome::Pending,
         _ => return None,
     };
-    let product = unsafe { read_cstr(backend::store_purchase_product()) };
+    let product = unsafe { take_string(backend::store_purchase_product()) };
     Some((outcome, product))
 }
 
@@ -216,9 +171,21 @@ fn entitlements_rev() -> u64 {
     unsafe { backend::store_entitlements_rev() }
 }
 
-fn fetch_entitlements() -> Vec<String> {
-    let json = unsafe { read_cstr(backend::store_entitlements_json()) };
-    serde_json::from_str(&json).unwrap_or_default()
+fn fetch_entitlements() -> Result<state::EntitlementSnapshot, serde_json::Error> {
+    let json = unsafe { take_string(backend::store_entitlements_json()) };
+    decode_entitlement_snapshot(&json)
+}
+
+/// Copy one caller-owned native string and release the bridge allocation.
+unsafe fn take_string(ptr: *mut c_char) -> String {
+    if ptr.is_null() {
+        return String::new();
+    }
+    let value = unsafe { CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .into_owned();
+    unsafe { backend::store_string_free(ptr) };
+    value
 }
 
 // ---------- Plugin ----------
@@ -254,7 +221,17 @@ impl Plugin for StorePlugin {
             .add_message::<PurchaseCompleted>()
             .add_message::<RestoreCompleted>()
             .add_message::<EntitlementsChanged>()
-            .add_systems(Update, (init_once, pump_requests, poll_store).chain());
+            .add_systems(
+                Update,
+                (
+                    init_once,
+                    poll_products,
+                    poll_entitlements,
+                    pump_requests,
+                    poll_operations,
+                )
+                    .chain(),
+            );
 
         app.init_resource::<AppStoreEnvironment>()
             .add_systems(Update, (init_environment_once, poll_environment).chain());
@@ -300,6 +277,8 @@ fn init_once(config: Option<Res<StoreConfig>>, mut poll: ResMut<StorePoll>) {
 /// Forward consumer requests to the backend.
 fn pump_requests(
     poll: Res<StorePoll>,
+    products: Res<StoreProducts>,
+    entitlements: Res<Entitlements>,
     mut activity: ResMut<StoreActivity>,
     mut buys: MessageReader<PurchaseRequest>,
     mut restores: MessageReader<RestoreRequest>,
@@ -309,6 +288,15 @@ fn pump_requests(
         return;
     }
     for buy in buys.read() {
+        let is_available = products.state == ProductsState::Ready && products.get(&buy.0).is_some();
+        let can_purchase = entitlements.is_ready() && !entitlements.owns(&buy.0);
+        if !is_available || !can_purchase {
+            purchase_completed.write(PurchaseCompleted {
+                product_id: buy.0.clone(),
+                outcome: PurchaseOutcome::Failed,
+            });
+            continue;
+        }
         if !start_purchase(&mut activity, &buy.0) {
             continue;
         }
@@ -328,16 +316,11 @@ fn pump_requests(
     }
 }
 
-/// Drain the polled backend state into resources + messages.
-fn poll_store(
+/// Project the native product catalogue into its resource and update message.
+fn poll_products(
     mut poll: ResMut<StorePoll>,
     mut store_products: ResMut<StoreProducts>,
-    mut entitlements: ResMut<Entitlements>,
-    mut activity: ResMut<StoreActivity>,
     mut products_updated: MessageWriter<ProductsUpdated>,
-    mut purchase_completed: MessageWriter<PurchaseCompleted>,
-    mut restore_completed: MessageWriter<RestoreCompleted>,
-    mut entitlements_changed: MessageWriter<EntitlementsChanged>,
 ) {
     if !poll.inited {
         return;
@@ -346,23 +329,58 @@ fn poll_store(
     let state = products_state();
     if state != poll.last_products {
         poll.last_products = state;
-        store_products.state = state;
-        if state == ProductsState::Ready {
-            store_products.items = products();
+        match state {
+            ProductsState::Ready => match products() {
+                Ok(items) => {
+                    store_products.items = items;
+                    store_products.state = ProductsState::Ready;
+                }
+                Err(_) => {
+                    store_products.items.clear();
+                    store_products.state = ProductsState::Failed;
+                }
+            },
+            ProductsState::Loading | ProductsState::Failed => {
+                store_products.items.clear();
+                store_products.state = state;
+            }
         }
         products_updated.write(ProductsUpdated);
     }
+}
 
-    // Both native success paths refresh entitlements before publishing their
-    // terminal state. Project that truth first so completion consumers observe
-    // the corresponding ownership snapshot in the same frame.
+/// Project native entitlement truth before operation completions are emitted.
+fn poll_entitlements(
+    mut poll: ResMut<StorePoll>,
+    mut entitlements: ResMut<Entitlements>,
+    mut entitlements_changed: MessageWriter<EntitlementsChanged>,
+) {
+    if !poll.inited {
+        return;
+    }
     let rev = entitlements_rev();
     if rev != poll.ent_rev {
         poll.ent_rev = rev;
-        entitlements.owned = fetch_entitlements().into_iter().collect();
-        entitlements_changed.write(EntitlementsChanged);
+        let changed = match fetch_entitlements() {
+            Ok(snapshot) => entitlements.apply(snapshot),
+            Err(_) => entitlements.fail(),
+        };
+        if changed {
+            entitlements_changed.write(EntitlementsChanged);
+        }
     }
+}
 
+/// Publish terminal purchase and restore operations after entitlement truth.
+fn poll_operations(
+    poll: Res<StorePoll>,
+    mut activity: ResMut<StoreActivity>,
+    mut purchase_completed: MessageWriter<PurchaseCompleted>,
+    mut restore_completed: MessageWriter<RestoreCompleted>,
+) {
+    if !poll.inited {
+        return;
+    }
     if let Some((outcome, product_id)) = purchase_result() {
         finish_activity(&mut activity);
         if !product_id.is_empty() {
@@ -378,5 +396,264 @@ fn poll_store(
         finish_activity(&mut activity);
         restore_completed.write(RestoreCompleted { outcome });
         restore_clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::ecs::message::Messages;
+
+    fn app_with_config() -> App {
+        backend::reset();
+        let mut app = App::new();
+        app.insert_resource(StoreConfig {
+            product_ids: vec!["com.example.supporter".into()],
+        });
+        app.add_plugins(StorePlugin);
+        app
+    }
+
+    #[test]
+    fn first_empty_snapshot_resolves_and_emits() {
+        let mut app = app_with_config();
+        app.update();
+        app.world_mut()
+            .resource_mut::<Messages<EntitlementsChanged>>()
+            .clear();
+
+        backend::publish_entitlements(r#"{"state":"ready","product_ids":[]}"#);
+        app.update();
+
+        let entitlements = app.world().resource::<Entitlements>();
+        assert!(entitlements.is_ready());
+        assert!(!entitlements.owns("com.example.supporter"));
+        assert_eq!(
+            app.world()
+                .resource::<Messages<EntitlementsChanged>>()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn owned_snapshot_then_revocation_are_distinct_events() {
+        let mut app = app_with_config();
+        app.update();
+        app.world_mut()
+            .resource_mut::<Messages<EntitlementsChanged>>()
+            .clear();
+
+        backend::publish_entitlements(
+            r#"{"state":"ready","product_ids":["com.example.supporter"]}"#,
+        );
+        app.update();
+        assert!(
+            app.world()
+                .resource::<Entitlements>()
+                .owns("com.example.supporter")
+        );
+
+        backend::publish_entitlements(r#"{"state":"ready","product_ids":[]}"#);
+        app.update();
+        assert!(
+            !app.world()
+                .resource::<Entitlements>()
+                .owns("com.example.supporter")
+        );
+        assert_eq!(
+            app.world()
+                .resource::<Messages<EntitlementsChanged>>()
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn malformed_payload_fails_without_revoking_verified_ownership() {
+        let mut app = app_with_config();
+        app.update();
+        backend::publish_entitlements(
+            r#"{"state":"ready","product_ids":["com.example.supporter"]}"#,
+        );
+        app.update();
+
+        backend::publish_entitlements("not-json");
+        app.update();
+
+        let entitlements = app.world().resource::<Entitlements>();
+        assert_eq!(entitlements.state(), EntitlementsState::Failed);
+        assert!(entitlements.owns("com.example.supporter"));
+    }
+
+    #[test]
+    fn failed_snapshot_carries_last_verified_ownership_across_skipped_revisions() {
+        let mut app = app_with_config();
+        app.update();
+
+        backend::publish_entitlements(
+            r#"{"state":"ready","product_ids":["com.example.supporter"]}"#,
+        );
+        backend::publish_entitlements(
+            r#"{"state":"failed","product_ids":["com.example.supporter"]}"#,
+        );
+        app.update();
+
+        let entitlements = app.world().resource::<Entitlements>();
+        assert_eq!(entitlements.state(), EntitlementsState::Failed);
+        assert!(entitlements.owns("com.example.supporter"));
+    }
+
+    #[test]
+    fn failed_initial_read_can_recover_to_authoritative_empty() {
+        let mut app = app_with_config();
+        app.update();
+
+        backend::publish_entitlements(r#"{"state":"failed","product_ids":[]}"#);
+        app.update();
+        assert_eq!(
+            app.world().resource::<Entitlements>().state(),
+            EntitlementsState::Failed
+        );
+
+        backend::publish_entitlements(r#"{"state":"ready","product_ids":[]}"#);
+        app.update();
+
+        let entitlements = app.world().resource::<Entitlements>();
+        assert!(entitlements.is_ready());
+        assert!(!entitlements.owns("com.example.supporter"));
+    }
+
+    #[test]
+    fn purchase_is_rejected_until_store_truth_is_ready() {
+        let mut app = app_with_config();
+        app.update();
+        app.world_mut()
+            .write_message(PurchaseRequest("com.example.supporter".into()));
+        app.update();
+
+        assert_eq!(backend::purchase_calls(), 0);
+        assert_eq!(
+            app.world().resource::<Messages<PurchaseCompleted>>().len(),
+            1
+        );
+        let completed = app
+            .world_mut()
+            .resource_mut::<Messages<PurchaseCompleted>>()
+            .drain()
+            .next()
+            .unwrap();
+        assert_eq!(completed.outcome, PurchaseOutcome::Failed);
+    }
+
+    #[test]
+    fn malformed_product_payload_fails_instead_of_becoming_ready_empty() {
+        let mut app = app_with_config();
+        app.update();
+
+        backend::publish_products("not-json");
+        app.update();
+
+        let products = app.world().resource::<StoreProducts>();
+        assert_eq!(products.state, ProductsState::Failed);
+        assert!(products.items.is_empty());
+    }
+
+    #[test]
+    fn purchase_requires_localized_product_and_confirmed_unowned_snapshot() {
+        let mut app = app_with_config();
+        app.update();
+        backend::publish_products(
+            r#"[{"id":"com.example.supporter","display_name":"Supporter","display_price":"HK$ 18.00","description":"Thank you"}]"#,
+        );
+        backend::publish_entitlements(r#"{"state":"ready","product_ids":[]}"#);
+        app.update();
+
+        assert_eq!(
+            app.world()
+                .resource::<StoreProducts>()
+                .get("com.example.supporter")
+                .unwrap()
+                .display_price,
+            "HK$ 18.00"
+        );
+        app.world_mut()
+            .write_message(PurchaseRequest("com.example.supporter".into()));
+        app.update();
+        assert_eq!(backend::purchase_calls(), 1);
+    }
+
+    #[test]
+    fn purchase_is_rejected_when_product_is_already_owned() {
+        let mut app = app_with_config();
+        app.update();
+        backend::publish_products(
+            r#"[{"id":"com.example.supporter","display_name":"Supporter","display_price":"HK$ 18.00","description":"Thank you"}]"#,
+        );
+        backend::publish_entitlements(
+            r#"{"state":"ready","product_ids":["com.example.supporter"]}"#,
+        );
+        app.update();
+
+        app.world_mut()
+            .write_message(PurchaseRequest("com.example.supporter".into()));
+        app.update();
+
+        assert_eq!(backend::purchase_calls(), 0);
+        let completed = app
+            .world_mut()
+            .resource_mut::<Messages<PurchaseCompleted>>()
+            .drain()
+            .next()
+            .unwrap();
+        assert_eq!(completed.outcome, PurchaseOutcome::Failed);
+    }
+
+    #[test]
+    fn purchase_completion_observes_entitlement_from_the_same_poll() {
+        let mut app = app_with_config();
+        app.update();
+        backend::publish_products(
+            r#"[{"id":"com.example.supporter","display_name":"Supporter","display_price":"€1.99","description":"Thank you"}]"#,
+        );
+        backend::publish_entitlements(r#"{"state":"ready","product_ids":[]}"#);
+        app.update();
+        app.world_mut()
+            .write_message(PurchaseRequest("com.example.supporter".into()));
+        app.update();
+        backend::publish_entitlements(
+            r#"{"state":"ready","product_ids":["com.example.supporter"]}"#,
+        );
+        backend::publish_purchase_success("com.example.supporter");
+        app.update();
+
+        assert!(
+            app.world()
+                .resource::<Entitlements>()
+                .owns("com.example.supporter")
+        );
+        assert_eq!(
+            app.world().resource::<Messages<PurchaseCompleted>>().len(),
+            1
+        );
+        assert!(app.world().resource::<StoreActivity>().is_idle());
+    }
+
+    #[test]
+    fn restore_empty_resolves_before_completion() {
+        let mut app = app_with_config();
+        app.update();
+        app.world_mut().write_message(RestoreRequest);
+        app.update();
+        backend::publish_entitlements(r#"{"state":"ready","product_ids":[]}"#);
+        backend::publish_restore_success();
+        app.update();
+
+        assert!(app.world().resource::<Entitlements>().is_ready());
+        assert_eq!(
+            app.world().resource::<Messages<RestoreCompleted>>().len(),
+            1
+        );
+        assert!(app.world().resource::<StoreActivity>().is_idle());
     }
 }
