@@ -79,10 +79,18 @@ fn ads_ready(admob: Res<AdmobState>) {
     if admob.can_request_ads { /* ad requests are permitted */ }
 }
 
-// Gate features on ownership (covers purchase, restore, relaunch).
+// StoreKit first resolves Checking -> Ready or Failed. Keep purchases, ads,
+// and tracking closed until Ready; only then is an absent id confirmed unowned.
 #[cfg(target_os = "ios")]
 fn gate(entitlements: Res<Entitlements>) {
-    if entitlements.owns("com.example.app.removeads") { /* hide ads */ }
+    match entitlements.state() {
+        EntitlementsState::Checking | EntitlementsState::Failed => {
+            /* keep purchase, ads, and tracking closed */
+        }
+        EntitlementsState::Ready
+            if entitlements.owns("com.example.app.removeads") => { /* purchased */ }
+        EntitlementsState::Ready => { /* localized offer may be shown */ }
+    }
 }
 
 // Keep progress visible while StoreKit is working. Presentation stays yours.
@@ -171,6 +179,17 @@ TestFlight as `Sandbox`, but sandbox is not a reliable distinction between
 TestFlight and every development install. Use the resource for runtime service
 or ad-unit selection, but keep build-time values such as
 `GADApplicationIdentifier` in the app target configuration.
+
+`StoreProducts::get(id).display_price` is StoreKit's localized
+`Product.displayPrice`; never replace it with a hard-coded production price.
+`Entitlements` begins in `Checking` and publishes `EntitlementsChanged` for its
+first verified snapshot even when the result is empty. Keep purchase, ads, and
+tracking closed until `EntitlementsState::Ready`; `Failed` retains the last
+verified ownership set but is not permission to infer that an absent id is
+unowned. Consumables do not appear in `Entitlements`. Do not persist or migrate
+ownership in a game save. The toolkit
+reconciles at launch, foreground activation, purchase, restore, and verified
+transaction updates.
 
 `StoreActivity` reports whether a purchase or explicit restore is in flight.
 Use it to disable duplicate actions and keep progress visible until

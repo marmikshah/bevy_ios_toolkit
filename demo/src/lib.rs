@@ -204,6 +204,8 @@ fn restyle_buttons(
 fn on_store_button_press(
     buttons: Query<(&Interaction, &Action), Changed<Interaction>>,
     activity: Res<StoreActivity>,
+    products: Res<StoreProducts>,
+    entitlements: Res<Entitlements>,
     mut purchase: MessageWriter<PurchaseRequest>,
     mut restore: MessageWriter<RestoreRequest>,
 ) {
@@ -212,9 +214,14 @@ fn on_store_button_press(
             continue;
         }
         match action {
-            Action::Purchase => {
+            Action::Purchase
+                if entitlements.is_ready()
+                    && !entitlements.owns(REMOVE_ADS)
+                    && products.get(REMOVE_ADS).is_some() =>
+            {
                 purchase.write(PurchaseRequest(REMOVE_ADS.into()));
             }
+            Action::Purchase => {}
             Action::Restore => {
                 restore.write(RestoreRequest);
             }
@@ -400,8 +407,9 @@ fn update_status(
     };
     #[cfg(target_os = "ios")]
     let store = format!(
-        "store: {} | activity: {:?} | ads-removed: {} | ",
+        "store: {} | entitlements: {:?} | activity: {:?} | ads-removed: {} | ",
         *environment,
+        entitlements.state(),
         *activity,
         entitlements.owns(REMOVE_ADS)
     );

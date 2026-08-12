@@ -5,6 +5,26 @@ format loosely [Keep a Changelog](https://keepachangelog.com). Entries begin
 from the point this file was added — earlier releases live in the crates.io
 version history and the git log.
 
+## 0.4.2 — 2026-08-12
+
+### Added
+- Expose entitlement readiness as `Checking`, `Ready`, or `Failed`, and emit
+  `EntitlementsChanged` for the first authoritative StoreKit snapshot even when
+  the account owns no products.
+- Reconcile verified entitlements on launch, foreground activation, purchase,
+  restore, and transaction updates through one serialized native owner.
+- Test initial empty ownership, revocation, failures, operation ordering,
+  localized prices, and entitlement triggers that overlap an in-flight read.
+
+### Fixed
+- Prevent a stale persisted ownership decision from surviving forever because
+  StoreKit's initial empty entitlement result produced no event.
+- Retain the last verified ownership set when reconciliation fails, reject
+  purchases until product and entitlement truth are ready, and stop malformed
+  bridge payloads from silently becoming empty state.
+- Return caller-owned native strings across the C boundary so a concurrent
+  Swift update cannot invalidate data while Rust copies it.
+
 ## 0.4.1 — 2026-08-10
 
 ### Added
