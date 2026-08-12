@@ -288,6 +288,9 @@ fn pump_requests(
         return;
     }
     for buy in buys.read() {
+        if !activity.is_idle() {
+            continue;
+        }
         let is_available = products.state == ProductsState::Ready && products.get(&buy.0).is_some();
         let can_purchase = entitlements.is_ready() && !entitlements.owns(&buy.0);
         if !is_available || !can_purchase {
@@ -309,6 +312,9 @@ fn pump_requests(
         }
     }
     for _ in restores.read() {
+        if !activity.is_idle() {
+            continue;
+        }
         if !start_restore(&mut activity) {
             continue;
         }
@@ -607,6 +613,34 @@ mod tests {
             .next()
             .unwrap();
         assert_eq!(completed.outcome, PurchaseOutcome::Failed);
+    }
+
+    #[test]
+    fn duplicate_purchase_while_busy_does_not_emit_a_false_failure() {
+        let mut app = app_with_config();
+        app.update();
+        backend::publish_products(
+            r#"[{"id":"com.example.supporter","display_name":"Supporter","display_price":"HK$ 18.00","description":"Thank you"}]"#,
+        );
+        backend::publish_entitlements(r#"{"state":"ready","product_ids":[]}"#);
+        app.update();
+
+        app.world_mut()
+            .write_message(PurchaseRequest("com.example.supporter".into()));
+        app.update();
+        assert_eq!(backend::purchase_calls(), 1);
+
+        app.world_mut()
+            .write_message(PurchaseRequest("com.example.supporter".into()));
+        app.update();
+
+        assert_eq!(backend::purchase_calls(), 1);
+        assert!(
+            app.world()
+                .resource::<Messages<PurchaseCompleted>>()
+                .is_empty()
+        );
+        assert!(!app.world().resource::<StoreActivity>().is_idle());
     }
 
     #[test]
