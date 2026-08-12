@@ -70,7 +70,15 @@ pub fn run() {
     app.insert_resource(StoreConfig {
         product_ids: vec![REMOVE_ADS.into()],
     })
-    .add_systems(Update, on_store_button_press);
+    .init_resource::<LastStoreResult>()
+    .add_systems(
+        Update,
+        (
+            on_store_button_press,
+            record_store_results,
+            sync_store_button,
+        ),
+    );
 
     app.run();
 }
@@ -115,11 +123,19 @@ const ROWS: &[(&str, Action)] = &[
 #[derive(Resource, Default)]
 struct PendingShow(std::collections::HashSet<AdFormat>);
 
+#[cfg(target_os = "ios")]
+#[derive(Resource, Default)]
+struct LastStoreResult(String);
+
 #[derive(Component)]
 struct StatusLine;
 
 #[derive(Component)]
 struct PrivacyOptionsButton;
+
+#[cfg(target_os = "ios")]
+#[derive(Component)]
+struct PurchaseButtonLabel;
 
 fn setup(mut commands: Commands) {
     commands.spawn(Camera2d);
@@ -169,7 +185,8 @@ fn setup(mut commands: Commands) {
                     button.insert(PrivacyOptionsButton);
                 }
                 button.with_children(|b| {
-                    b.spawn((
+                    #[cfg_attr(not(target_os = "ios"), allow(unused_variables))]
+                    let label = b.spawn((
                         Text::new(*label),
                         TextFont {
                             font_size: FontSize::Px(18.0),
@@ -177,6 +194,11 @@ fn setup(mut commands: Commands) {
                         },
                         TextColor(Color::WHITE),
                     ));
+                    #[cfg(target_os = "ios")]
+                    if *action == Action::Purchase {
+                        let mut label = label;
+                        label.insert(PurchaseButtonLabel);
+                    }
                 });
             }
         });
@@ -228,6 +250,45 @@ fn on_store_button_press(
             _ => {}
         }
     }
+}
+
+#[cfg(target_os = "ios")]
+fn record_store_results(
+    mut last: ResMut<LastStoreResult>,
+    mut purchases: MessageReader<PurchaseCompleted>,
+    mut restores: MessageReader<RestoreCompleted>,
+) {
+    for purchase in purchases.read() {
+        last.0 = format!("purchase {}: {:?}", purchase.product_id, purchase.outcome);
+    }
+    for restore in restores.read() {
+        last.0 = format!("restore: {:?}", restore.outcome);
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn sync_store_button(
+    products: Res<StoreProducts>,
+    entitlements: Res<Entitlements>,
+    activity: Res<StoreActivity>,
+    mut label: Query<&mut Text, With<PurchaseButtonLabel>>,
+) {
+    if !products.is_changed() && !entitlements.is_changed() && !activity.is_changed() {
+        return;
+    }
+    let Ok(mut label) = label.single_mut() else {
+        return;
+    };
+    label.0 = match &*activity {
+        StoreActivity::Purchasing { .. } => "Purchasing…".into(),
+        StoreActivity::Restoring => "Restoring…".into(),
+        StoreActivity::Idle if entitlements.owns(REMOVE_ADS) => "Purchased".into(),
+        StoreActivity::Idle if !entitlements.is_ready() => "Checking Purchases…".into(),
+        StoreActivity::Idle => products.get(REMOVE_ADS).map_or_else(
+            || "Store Unavailable".into(),
+            |product| format!("Buy: Remove Ads — {}", product.display_price),
+        ),
+    };
 }
 
 /// Fan ad button presses out to the matching toolkit message.
@@ -395,6 +456,8 @@ fn update_status(
     #[cfg(target_os = "ios")] environment: Res<AppStoreEnvironment>,
     #[cfg(target_os = "ios")] entitlements: Res<Entitlements>,
     #[cfg(target_os = "ios")] activity: Res<StoreActivity>,
+    #[cfg(target_os = "ios")] products: Res<StoreProducts>,
+    #[cfg(target_os = "ios")] last_store_result: Res<LastStoreResult>,
     inventory: Res<AdInventory>,
     admob: Res<AdmobState>,
     privacy_options: Res<PrivacyOptionsRequirement>,
@@ -406,12 +469,22 @@ fn update_status(
         return;
     };
     #[cfg(target_os = "ios")]
+    let offer = products
+        .get(REMOVE_ADS)
+        .map_or("unavailable", |product| product.display_price.as_str());
+    #[cfg(target_os = "ios")]
     let store = format!(
-        "store: {} | entitlements: {:?} | activity: {:?} | ads-removed: {} | ",
+        "store: {} | price: {} | entitlements: {:?} | owned: {} | activity: {:?} | result: {} | ",
         *environment,
+        offer,
         entitlements.state(),
+        entitlements.owns(REMOVE_ADS),
         *activity,
-        entitlements.owns(REMOVE_ADS)
+        if last_store_result.0.is_empty() {
+            "none"
+        } else {
+            &last_store_result.0
+        },
     );
     #[cfg(not(target_os = "ios"))]
     let store = "";
