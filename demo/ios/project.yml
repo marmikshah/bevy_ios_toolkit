@@ -99,6 +99,8 @@ targets:
         product: GameCenter
       - package: BevyIosToolkit
         product: Review
+      - package: BevyIosToolkit
+        product: Notifications
       - sdk: Metal.framework
       - sdk: QuartzCore.framework
       - sdk: UIKit.framework
@@ -109,6 +111,7 @@ targets:
       - sdk: GameKit.framework
       - sdk: AppTrackingTransparency.framework
       - sdk: AdSupport.framework
+      - sdk: UserNotifications.framework
     preBuildScripts:
       - script: bash "$PROJECT_DIR/build_rust.sh"
         name: Build Rust static library

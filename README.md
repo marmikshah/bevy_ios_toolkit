@@ -11,6 +11,7 @@ ECS resources and messages. One crate, one plugin, a **feature per integration**
 | `gamekit` | `gamekit` | Game Center auth, leaderboards, achievements |
 | `review` | `review` | StoreKit review prompt |
 | `platform` | `platform` | haptics, safe-area insets, outbound links, share sheet, thermal/low-power state |
+| `notifications` | `notifications` | local user notifications (no APNs) |
 
 > **Status: experimental (0.4, pre-release).** APIs will move. Live behaviour
 > needs a real device, the relevant Apple/Google setup, and the matching Swift
@@ -64,6 +65,25 @@ fn main() {
     });
 
     app.run();
+}
+
+// Ask once, then schedule a real event. `notifications`
+fn remind(
+    permission: Res<NotificationPermission>,
+    mut ask: MessageWriter<RequestNotificationPermission>,
+    mut notify: MessageWriter<ScheduleNotification>,
+) {
+    if !permission.is_determined() {
+        ask.write(RequestNotificationPermission);
+    } else if permission.can_deliver() {
+        // The same id replaces rather than stacks, so this is idempotent.
+        notify.write(ScheduleNotification {
+            id: "restock".into(),
+            title: "THE VAN CAME".into(),
+            body: "Something new is in the machine.".into(),
+            after: std::time::Duration::from_secs(4 * 60 * 60),
+        });
+    }
 }
 
 // Show an interstitial once it's loaded.
@@ -150,7 +170,8 @@ are no files to vendor or keep in sync by hand.
 2. Add this repo as a Swift package dependency and link the matching products.
    Each product links its own system frameworks; `Ads` brings the Google Mobile
    Ads + UMP SDKs transitively. The symbol prefixes (`store_`, `platform_`, `admob_`,
-   `att_`, `gamekit_`, `review_`) won't collide with your own bridge.
+   `att_`, `gamekit_`, `review_`, `notifications_`) won't collide with your own
+   bridge.
 
    | cargo feature | SPM product |
    |---------------|-------------|
@@ -160,6 +181,7 @@ are no files to vendor or keep in sync by hand.
    | `att` | `Att` |
    | `gamekit` | `GameCenter` |
    | `review` | `Review` |
+   | `notifications` | `Notifications` |
 
 3. Per-feature native setup (stays in your app — the package ships none of it):
    - **ads** — set `GADApplicationIdentifier` in `Info.plist` (use `TEST_APP_ID`
@@ -169,6 +191,10 @@ are no files to vendor or keep in sync by hand.
    - **att** — add `NSUserTrackingUsageDescription` to `Info.plist`.
    - **gamekit** — enable the Game Center capability.
    - **storekit** — define products in App Store Connect (or a StoreKit config).
+   - **notifications** — nothing. No `Info.plist` key, no entitlement, no
+     capability: these are local notifications, not push. To catch one that
+     *launched* the app, call `notifications_install_delegate()` from your app
+     delegate — see below.
 4. The `demo/ios/` XcodeGen project shows the whole wiring end to end — it
    consumes the package by relative path.
 
@@ -196,6 +222,38 @@ Use it to disable duplicate actions and keep progress visible until
 `PurchaseCompleted` or `RestoreCompleted` arrives. Ownership never comes from
 the operation result: always read `Entitlements`, including during launch-time
 reconciliation when no user-facing success message should be inferred.
+
+### Notifications are local, and for a real event
+
+There is no remote push here: no APNs, no device token, no server, and nothing
+that counts as data collection on a privacy manifest.
+
+Ids are yours and **replace** rather than stack — a timer that slips must never
+leave two notifications queued, which also makes rescheduling idempotent.
+`PendingNotifications` records what this app has asked for *since it launched*;
+it is not the system's queue, so when the two could disagree, believe the system.
+
+Opens are captured by a `UNUserNotificationCenterDelegate` installed on the
+first update. iOS delivers the response for a notification that *launched* the
+app very early — possibly before Bevy's first frame — and a response delivered
+with no delegate set is gone. If catching that matters, call the shim's
+installer from your own app delegate first; it is idempotent, and anything
+buffered beforehand is drained on the first update:
+
+```swift
+@_silgen_name("notifications_install_delegate")
+func notificationsInstallDelegate()
+
+func application(_: UIApplication, didFinishLaunchingWithOptions _: ...) -> Bool {
+    notificationsInstallDelegate()
+    return true
+}
+```
+
+A notification API makes the daily-nag pattern very easy to build. Send one
+because something the player asked to know about actually happened — never to
+drag them back. Restraint is yours to enforce, which is what the desktop fake
+exists to let you test.
 
 ## Testing
 

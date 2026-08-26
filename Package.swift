@@ -23,6 +23,7 @@ let package = Package(
         // `GameKit` would shadow Apple's `GameKit` module inside the shim.
         .library(name: "GameCenter", targets: ["GameCenter"]),
         .library(name: "Review", targets: ["Review"]),
+        .library(name: "Notifications", targets: ["Notifications"]),
     ],
     dependencies: [
         .package(
@@ -72,6 +73,10 @@ let package = Package(
         .target(
             name: "Review",
             linkerSettings: [.linkedFramework("StoreKit")]
+        ),
+        .target(
+            name: "Notifications",
+            linkerSettings: [.linkedFramework("UserNotifications")]
         ),
     ]
 )
