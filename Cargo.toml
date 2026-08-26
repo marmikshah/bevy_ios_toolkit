@@ -28,7 +28,8 @@ platform = []
 att = []
 gamekit = []
 review = []
-all = ["storekit", "ads", "platform", "att", "gamekit", "review"]
+notifications = ["dep:serde", "dep:serde_json"]
+all = ["storekit", "ads", "platform", "att", "gamekit", "review", "notifications"]
 
 [[example]]
 name = "ads"

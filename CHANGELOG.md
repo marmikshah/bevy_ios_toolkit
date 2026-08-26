@@ -5,6 +5,18 @@ format loosely [Keep a Changelog](https://keepachangelog.com). Entries begin
 from the point this file was added — earlier releases live in the crates.io
 version history and the git log.
 
+## Unreleased
+
+### Added
+- A `notifications` feature bridging local user notifications: ask for
+  permission, schedule against a caller-owned id that replaces rather than
+  stacks, cancel one or all, and read `NotificationOpened` when the app is
+  opened from one. Local only — no APNs, no device token, no server, and no
+  `Info.plist` key required.
+- A desktop fake for the whole flow, so scheduling policy is testable off a
+  device: `BEVY_IOS_FAKE_NOTIFICATIONS`, `BEVY_IOS_FAKE_NOTIFICATION_OPENED`,
+  and `BEVY_IOS_FAKE_NOTIFICATIONS_REFUSE`.
+
 ## 0.4.2 — 2026-08-12
 
 ### Added

@@ -10,6 +10,7 @@
 //! | `att` | [`att`] | App Tracking Transparency prompt |
 //! | `gamekit` | [`gamekit`] | Game Center auth, leaderboards, achievements |
 //! | `review` | [`review`] | StoreKit review prompt |
+//! | `notifications` | [`notifications`] | local user notifications |
 //! | `platform` | [`platform`] | haptics, safe-area insets, links, share sheet, thermal/low-power state, boot shield, audio session |
 //!
 //! No feature is on by default. Enable exactly what you ship — a module's
@@ -68,7 +69,8 @@ mod store_state;
 #[cfg(any(
     all(feature = "storekit", any(target_os = "ios", doc)),
     feature = "ads",
-    feature = "gamekit"
+    feature = "gamekit",
+    feature = "notifications"
 ))]
 mod ffi;
 
@@ -89,6 +91,9 @@ pub mod gamekit;
 
 #[cfg(feature = "review")]
 pub mod review;
+
+#[cfg(feature = "notifications")]
+pub mod notifications;
 
 pub mod prelude {
     pub use crate::IosPlugin;
@@ -124,6 +129,13 @@ pub mod prelude {
 
     #[cfg(feature = "review")]
     pub use crate::review;
+
+    #[cfg(feature = "notifications")]
+    pub use crate::notifications::{
+        CancelAllNotifications, CancelNotification, NotificationOpened, NotificationPermission,
+        NotificationPermissionChanged, NotificationScheduleFailed, PendingNotifications,
+        RequestNotificationPermission, ScheduleNotification,
+    };
 }
 
 /// Installs every enabled iOS integration. Composition is feature-driven: a
@@ -142,6 +154,8 @@ impl Plugin for IosPlugin {
         app.add_plugins(gamekit::GameKitPlugin);
         #[cfg(feature = "platform")]
         app.add_plugins(platform::PlatformPlugin);
+        #[cfg(feature = "notifications")]
+        app.add_plugins(notifications::NotificationsPlugin);
         // `review` is a function-only module — nothing to wire.
         let _ = app;
     }

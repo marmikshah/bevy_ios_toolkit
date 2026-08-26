@@ -100,6 +100,7 @@ enum Action {
     Share,
     Review,
     GameCenter,
+    Notify,
 }
 
 const ROWS: &[(&str, Action)] = &[
@@ -117,6 +118,7 @@ const ROWS: &[(&str, Action)] = &[
     ("Share Result", Action::Share),
     ("Ask for Review", Action::Review),
     ("Game Center", Action::GameCenter),
+    ("Notify in 10s", Action::Notify),
 ];
 
 /// Full-screen ads a tap asked for; presented by `drive_pending` once loaded.
@@ -354,6 +356,9 @@ fn on_ads_button_press(
 fn on_platform_button_press(
     buttons: Query<(&Interaction, &Action), Changed<Interaction>>,
     gc: Res<GameCenter>,
+    permission: Res<NotificationPermission>,
+    mut ask: MessageWriter<RequestNotificationPermission>,
+    mut notify: MessageWriter<ScheduleNotification>,
     mut att: MessageWriter<RequestTracking>,
     mut auth: MessageWriter<AuthenticateGameCenter>,
     mut submit: MessageWriter<SubmitScore>,
@@ -376,6 +381,20 @@ fn on_platform_button_press(
             }
             Action::Review => {
                 review::request();
+            }
+            // First tap asks; once the answer is in, a tap schedules one ten
+            // seconds out. Background the app to see it arrive.
+            Action::Notify => {
+                if permission.can_deliver() {
+                    notify.write(ScheduleNotification {
+                        id: "demo".into(),
+                        title: "bevy_ios_toolkit".into(),
+                        body: "Scheduled ten seconds ago, from Rust.".into(),
+                        after: std::time::Duration::from_secs(10),
+                    });
+                } else {
+                    ask.write(RequestNotificationPermission);
+                }
             }
             // First tap signs in; once authenticated, a tap submits a score +
             // achievement and opens the dashboard — the whole feature in one button.
