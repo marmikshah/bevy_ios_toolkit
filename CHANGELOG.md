@@ -5,7 +5,7 @@ format loosely [Keep a Changelog](https://keepachangelog.com). Entries begin
 from the point this file was added — earlier releases live in the crates.io
 version history and the git log.
 
-## Unreleased
+## 0.5.0 — unreleased
 
 ### Added
 - A `notifications` feature bridging local user notifications: ask for

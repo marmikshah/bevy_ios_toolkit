@@ -19,10 +19,10 @@
 //!
 //! ```toml
 //! [dependencies]
-//! bevy_ios_toolkit = { version = "0.4", features = ["ads", "att"] }
+//! bevy_ios_toolkit = { version = "0.5", features = ["ads", "att"] }
 //!
 //! [target.'cfg(target_os = "ios")'.dependencies]
-//! bevy_ios_toolkit = { version = "0.4", features = ["storekit"] }
+//! bevy_ios_toolkit = { version = "0.5", features = ["storekit"] }
 //! ```
 //!
 //! # The native contract
