@@ -13,7 +13,7 @@ ECS resources and messages. One crate, one plugin, a **feature per integration**
 | `platform` | `platform` | haptics, safe-area insets, outbound links, share sheet, thermal/low-power state |
 | `notifications` | `notifications` | local user notifications (no APNs) |
 
-> **Status: experimental (0.4, pre-release).** APIs will move. Live behaviour
+> **Status: experimental (0.5, pre-release).** APIs will move. Live behaviour
 > needs a real device, the relevant Apple/Google setup, and the matching Swift
 > shim linked from the companion SPM package — see "iOS integration".
 
@@ -42,10 +42,10 @@ of misbehaving at runtime.
 
 ```toml
 [dependencies]
-bevy_ios_toolkit = { version = "0.4", features = ["ads", "att"] }
+bevy_ios_toolkit = { version = "0.5", features = ["ads", "att"] }
 
 [target.'cfg(target_os = "ios")'.dependencies]
-bevy_ios_toolkit = { version = "0.4", features = ["storekit"] }
+bevy_ios_toolkit = { version = "0.5", features = ["storekit"] }
 ```
 
 ## Quick start
@@ -277,7 +277,7 @@ validated in Xcode with the SDKs linked.
 
 | `bevy_ios_toolkit` | `bevy` | iOS | AdMob SDK |
 |--------------------|--------|-----|-----------|
-| 0.4                | 0.19   | 16+ | 12.3–12.x (+ UMP 3.x) |
+| 0.5                | 0.19   | 16+ | 12.3–12.x (+ UMP 3.x) |
 
 ## Authorship
 
