@@ -24,6 +24,7 @@ struct Fake {
     consent_debug_geography: i32,
     reset_consent: bool,
     loaded: HashSet<i32>,
+    banner_height: f32,
     events: VecDeque<AdEvent>,
 }
 
@@ -157,11 +158,27 @@ pub unsafe fn admob_show(format: i32) {
 }
 
 pub unsafe fn admob_banner_show(_unit_id: *const c_char, _position: i32) {
-    lock().push(event(AdFormat::Banner.as_i32(), "shown"));
+    let mut f = lock();
+    if Fake::env_formats("BEVY_ADMOB_FAKE_SHOW_FAIL").contains(&AdFormat::Banner.as_i32()) {
+        f.push(event(AdFormat::Banner.as_i32(), "show_failed"));
+        return;
+    }
+    f.banner_height = 50.0;
+    if Fake::env_formats("BEVY_ADMOB_FAKE_NO_FILL").contains(&AdFormat::Banner.as_i32()) {
+        f.push(event(AdFormat::Banner.as_i32(), "load_failed"));
+    } else {
+        f.push(event(AdFormat::Banner.as_i32(), "shown"));
+    }
 }
 
 pub unsafe fn admob_banner_hide() {
-    lock().push(event(AdFormat::Banner.as_i32(), "dismissed"));
+    let mut f = lock();
+    f.banner_height = 0.0;
+    f.push(event(AdFormat::Banner.as_i32(), "dismissed"));
+}
+
+pub unsafe fn admob_banner_height() -> f32 {
+    lock().banner_height
 }
 
 pub unsafe fn admob_request_consent() {
