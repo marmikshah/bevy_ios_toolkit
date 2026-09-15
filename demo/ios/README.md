@@ -80,6 +80,8 @@ activity and terminal result, plus the other toolkit integrations:
 - **Buy: Remove Ads** — StoreKit purchase of `iap.playground.removeads`.
 - **Restore Purchases** — explicit App Store synchronization with visible
   in-flight state.
+- **Check App Store Environment** — explicitly resolve the app transaction;
+  this can ask for an Apple Account. Ownership still reconciles at launch.
 - **Interstitial Ad** / **Rewarded Ad** — load *and* present from one tap.
 - **Toggle Banner** — show / hide the banner.
 - **Request Ad Consent** — UMP consent form.

@@ -1,6 +1,28 @@
 use std::fmt;
 
-use bevy::prelude::Resource;
+use bevy::prelude::{Local, Message, MessageReader, Resource};
+
+/// Explicitly start app-environment resolution. StoreKit's app transaction
+/// query can present an Apple Account sign-in sheet, so send this only when
+/// the app is ready for that interaction. Repeated requests are ignored.
+///
+/// Merely reading [`AppStoreEnvironment`] never starts native work. Product
+/// loading and entitlement reconciliation remain controlled by `StoreConfig`
+/// independently; they do not require this message.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct RequestAppStoreEnvironment;
+
+pub(crate) fn take_environment_request(
+    mut requests: MessageReader<RequestAppStoreEnvironment>,
+    mut started: Local<bool>,
+) -> bool {
+    let requested = requests.read().count() > 0;
+    if *started || !requested {
+        return false;
+    }
+    *started = true;
+    true
+}
 
 /// The environment reported by the verified StoreKit 2 app transaction.
 ///
@@ -14,6 +36,7 @@ use bevy::prelude::Resource;
 /// <https://developer.apple.com/documentation/storekit/apptransaction/environment>
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum AppStoreEnvironment {
+    /// No [`RequestAppStoreEnvironment`] has been sent, or
     /// `AppTransaction.shared` is still resolving.
     #[default]
     Pending,
@@ -71,6 +94,42 @@ pub(crate) const fn environment_from_raw(value: i32) -> AppStoreEnvironment {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bevy::prelude::*;
+
+    #[test]
+    fn environment_resolution_requires_a_request_and_starts_only_once() {
+        #[derive(Resource, Default)]
+        struct Starts(u32);
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<AppStoreEnvironment>()
+            .init_resource::<Starts>()
+            .add_message::<RequestAppStoreEnvironment>()
+            .add_systems(
+                Update,
+                take_environment_request.pipe(|In(start): In<bool>, mut starts: ResMut<Starts>| {
+                    if start {
+                        starts.0 += 1;
+                    }
+                }),
+            );
+        for _ in 0..3 {
+            assert_eq!(
+                *app.world().resource::<AppStoreEnvironment>(),
+                AppStoreEnvironment::Pending
+            );
+            app.update();
+        }
+        assert_eq!(app.world().resource::<Starts>().0, 0);
+        app.world_mut().write_message(RequestAppStoreEnvironment);
+        app.world_mut().write_message(RequestAppStoreEnvironment);
+        app.update();
+        assert_eq!(app.world().resource::<Starts>().0, 1);
+        app.world_mut().write_message(RequestAppStoreEnvironment);
+        app.update();
+        app.update();
+        assert_eq!(app.world().resource::<Starts>().0, 1);
+    }
 
     #[test]
     fn wire_values_are_explicit_and_unknown_values_fail_closed() {

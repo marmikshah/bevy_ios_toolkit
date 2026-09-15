@@ -202,8 +202,10 @@ With `platform`, call `platform::screen_size()` on the main thread before
 building `WindowPlugin` to size its initial window in **points**. After launch,
 it returns the key window's bounds, including resized iPad windows.
 
-On iOS, `AppStoreEnvironment` resolves independently of `StoreConfig` and the
-Swift bridge logs its terminal value once. The resource is not inserted on
+On iOS, send `RequestAppStoreEnvironment` when ready for a possible Apple Account
+sign-in sheet. Reading `AppStoreEnvironment` leaves it `Pending` until requested;
+`StoreConfig` still starts product and entitlement loading independently.
+The Swift bridge logs its terminal value once. The resource is not inserted on
 non-iOS targets; they do not need an App Store classification. Apple reports
 TestFlight as `Sandbox`, but sandbox is not a reliable distinction between
 TestFlight and every development install. Use the resource for runtime service
