@@ -102,5 +102,7 @@ resolution, mounted banner height, touch input, and background/foreground
 recovery. Screenshots and XCTest results go in `target/`. Run on both iOS 26.0
 and iOS 27; the same SDK 27 build must work on both. `tests/ios/run.sh` separately
 checks scene attachment and startup/window measurements without the ad SDK.
-The UI test sets `BEVY_IOS_TOOLKIT_DEMO_QA=1` to use UMP's test-only `Other`
-geography and reset cached consent, so ad readiness is independent of location.
+StoreKit uses Marmik's Playground (`com.marmikshah.playground`) and its live
+`iap.playground.removeads` product. Consent follows the device's saved choices
+and Google's response for its location. Authenticated purchase and restore
+checks use this same App Store Connect listing on a signed device build.
