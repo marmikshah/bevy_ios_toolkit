@@ -32,7 +32,7 @@ with open(sys.argv[1], "wb") as output:
         },
     }, output)
 PY
-xcrun swiftc -parse-as-library -target arm64-apple-ios16.0-simulator \
+xcrun --sdk iphonesimulator swiftc -parse-as-library -target arm64-apple-ios16.0-simulator \
     -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
     Sources/Platform/Scene.swift Sources/Platform/Screen.swift \
     tests/ios/SceneSmoke.swift -o "$app/SceneSmoke"

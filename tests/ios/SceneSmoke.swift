@@ -57,6 +57,14 @@ enum SceneSmoke {
         platform_screen_size(&size)
         precondition(size == [320, 480])
 
+        // Windows shown after willConnect must attach on their first show too.
+        let later = TestWinitWindow(frame: .zero)
+        later.rootViewController = UIViewController()
+        later.makeKeyAndVisible()
+        precondition(later.windowScene === scene)
+        precondition(later.frame == scene.coordinateSpace.bounds)
+        later.isHidden = true
+
         let ordinary = UIWindow(frame: .zero)
         ordinary.makeKeyAndVisible()
         precondition(ordinary.windowScene == nil, "unrelated window was changed")

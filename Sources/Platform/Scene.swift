@@ -8,6 +8,7 @@ import ObjectiveC
 
 @MainActor private enum SceneConnection {
     static weak var scene: UIWindowScene?
+    static let pending = NSHashTable<UIWindow>.weakObjects()
     static var installed = false
 
     static func install() {
@@ -25,10 +26,15 @@ extension UIWindow {
         // Ad SDKs, keyboards, boot shields, and scene-aware windows keep their
         // original behavior. This workaround owns only winit 0.30's orphan.
         if windowScene == nil,
-           let winitClass = NSClassFromString("WinitUIWindow"), isKind(of: winitClass),
-           let scene = SceneConnection.scene {
-            windowScene = scene
-            frame = scene.coordinateSpace.bounds
+           let winitClass = NSClassFromString("WinitUIWindow"), isKind(of: winitClass) {
+            if let scene = SceneConnection.scene {
+                windowScene = scene
+                frame = scene.coordinateSpace.bounds
+            } else {
+                // didFinishLaunching can show a window before willConnect.
+                // UIApplication.windows cannot find this orphan afterwards.
+                SceneConnection.pending.add(self)
+            }
         }
         // After the exchange this selector invokes UIKit's original method.
         bevyToolkit_makeKeyAndVisible()
@@ -46,6 +52,11 @@ public final class BevyIosToolkitSceneDelegate: NSObject, UIWindowSceneDelegate 
               session.role == .windowApplication else { return }
         SceneConnection.scene = scene
         SceneConnection.install()
+        let pending = SceneConnection.pending.allObjects
+        SceneConnection.pending.removeAllObjects()
+        for window in pending where window.windowScene == nil {
+            window.makeKeyAndVisible()
+        }
     }
 
     public func sceneDidDisconnect(_ scene: UIScene) {
@@ -60,6 +71,7 @@ public func platform_register_scene_delegate() {
     // A Rust reference to this C symbol retains the delegate in static builds
     // before UIApplicationMain resolves its name from Info.plist.
     _ = NSStringFromClass(BevyIosToolkitSceneDelegate.self)
+    MainActor.assumeIsolated { SceneConnection.install() }
 }
 #else
 @_cdecl("platform_register_scene_delegate")
