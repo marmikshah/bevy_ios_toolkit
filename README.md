@@ -156,8 +156,7 @@ fn privacy_entry_point(requirement: Res<PrivacyOptionsRequirement>) {
 }
 ```
 
-See [`demo/`](demo/) for the supported fake integrations on desktop and the
-complete native surface on iOS.
+See [`demo/`](demo/) for desktop fakes and the complete native iOS surface.
 
 ## iOS integration
 
@@ -168,6 +167,10 @@ are no files to vendor or keep in sync by hand.
 
 1. Add this crate with the features you ship.
 2. Add this repo as a Swift package dependency and link the matching products.
+   For SDK 27 builds, enable `platform`, link `Platform`, and copy the
+   `UIApplicationSceneManifest` from `demo/ios/project.yml` into your app's
+   Info.plist configuration. It names `BevyIosToolkitSceneDelegate`; without
+   scene adoption UIKit refuses to launch. `IosPlugin` registers it before run.
    Each product links its own system frameworks; `Ads` brings the Google Mobile
    Ads + UMP SDKs transitively. The symbol prefixes (`store_`, `platform_`, `admob_`,
    `att_`, `gamekit_`, `review_`, `notifications_`) won't collide with your own
@@ -267,6 +270,7 @@ exists to let you test.
 cargo test --features all
 cargo run --example ads   --features ads
 cargo check --target aarch64-apple-ios --features storekit
+tests/ios/run.sh BOOTED_SIMULATOR_UDID # UIKit scene/screen checks; use iOS 27
 ```
 
 The applicable fakes are env-tunable (force no-fill, show-failures, consent
@@ -287,11 +291,9 @@ validated in Xcode with the SDKs linked.
 
 ## Authorship
 
-Much of this project — the Rust crate, the Swift bridges, its tests, and these
-docs — was written by **Claude Opus 4.8** (Anthropic) under human direction and
-review. It ships with a passing test suite and a runnable demo, but it's young
-(0.x): read the code, run your own tests, and validate the native iOS paths on a
-real device before relying on it in production. Bug reports and PRs welcome.
+Much of this project was written by **Claude Opus 4.8** (Anthropic) under human
+direction and review. It is young (0.x): run the tests and validate native iOS
+paths on a real device before relying on it in production. Bug reports and PRs welcome.
 
 ## License
 

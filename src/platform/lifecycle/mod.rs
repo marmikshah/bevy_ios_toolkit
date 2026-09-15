@@ -11,3 +11,4 @@
 
 pub mod audio;
 pub mod boot_shield;
+pub mod scene;
