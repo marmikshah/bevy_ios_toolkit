@@ -35,7 +35,7 @@ mod screen;
 pub mod share;
 
 pub use haptics::Haptic;
-pub use lifecycle::{audio, boot_shield};
+pub use lifecycle::{audio, boot_shield, scene};
 pub use power::{PowerState, PowerStateChanged, ThermalState};
 pub use screen::screen_size;
 
@@ -46,6 +46,7 @@ pub struct PlatformPlugin;
 
 impl Plugin for PlatformPlugin {
     fn build(&self, app: &mut App) {
+        scene::register();
         app.init_resource::<PowerState>()
             .add_message::<PowerStateChanged>()
             .add_systems(Update, power::poll_power);
