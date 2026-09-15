@@ -198,6 +198,10 @@ are no files to vendor or keep in sync by hand.
 4. The `demo/ios/` XcodeGen project shows the whole wiring end to end — it
    consumes the package by relative path.
 
+With `platform`, call `platform::screen_size()` on the main thread before
+building `WindowPlugin` to size its initial window in **points**. After launch,
+it returns the key window's bounds, including resized iPad windows.
+
 On iOS, `AppStoreEnvironment` resolves independently of `StoreConfig` and the
 Swift bridge logs its terminal value once. The resource is not inserted on
 non-iOS targets; they do not need an App Store classification. Apple reports
