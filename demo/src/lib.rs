@@ -226,6 +226,7 @@ fn restyle_buttons(
 
 /// Forward one explicit iOS store action while the native owner is idle.
 #[cfg(target_os = "ios")]
+#[allow(clippy::too_many_arguments)]
 fn on_store_button_press(
     buttons: Query<(&Interaction, &Action), Changed<Interaction>>,
     activity: Res<StoreActivity>,
