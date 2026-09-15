@@ -359,6 +359,11 @@ pub struct AdmobState {
     pub can_request_ads: bool,
     /// Whether a banner is currently on screen.
     pub banner_visible: bool,
+    /// Mounted banner height in UIKit points, including its reserved space
+    /// before an ad fills. Zero when hidden or detached. Excludes safe-area
+    /// insets and caller padding; the desktop fake reserves 50 points. Native
+    /// changes can take one main-loop turn to appear when polled by a worker.
+    pub banner_height: f32,
 }
 
 // ---------- Messages (in) ----------
@@ -593,7 +598,6 @@ fn pump_requests(
     poll: Res<AdsPoll>,
     config: Option<Res<AdmobConfig>>,
     mut inventory: ResMut<AdInventory>,
-    mut state: ResMut<AdmobState>,
     mut loads: MessageReader<LoadAd>,
     mut shows: MessageReader<ShowAd>,
     mut banner_shows: MessageReader<ShowBanner>,
@@ -622,11 +626,9 @@ fn pump_requests(
     }
     for ShowBanner { position } in banner_shows.read() {
         banner_show(&resolve(AdFormat::Banner), *position);
-        state.banner_visible = true;
     }
     for _ in banner_hides.read() {
         banner_hide();
-        state.banner_visible = false;
     }
     for _ in consents.read() {
         request_consent();
@@ -658,6 +660,8 @@ fn poll_backend(
     }
 
     let consent = consent_status();
+    state.banner_height = unsafe { backend::admob_banner_height() };
+    state.banner_visible = state.banner_height > 0.0;
     if consent != poll.consent {
         poll.consent = consent;
         state.consent = consent;
@@ -1106,16 +1110,43 @@ mod tests {
         app.insert_resource(AdmobConfig::test_ads());
 
         app.update(); // init
+        assert_eq!(app.world().resource::<AdmobState>().banner_height, 0.0);
         app.world_mut()
             .resource_mut::<Messages<ShowBanner>>()
             .write(ShowBanner::default());
         app.update();
         assert!(app.world().resource::<AdmobState>().banner_visible);
+        assert_eq!(app.world().resource::<AdmobState>().banner_height, 50.0);
 
         app.world_mut()
             .resource_mut::<Messages<HideBanner>>()
             .write(HideBanner);
         app.update();
         assert!(!app.world().resource::<AdmobState>().banner_visible);
+        assert_eq!(app.world().resource::<AdmobState>().banner_height, 0.0);
+    }
+
+    #[test]
+    fn banner_reserves_space_on_no_fill_but_not_on_failed_mount() {
+        let _guard = guarded();
+        let mut app = build_app();
+        app.insert_resource(AdmobConfig::test_ads());
+        app.update();
+        unsafe { std::env::set_var("BEVY_ADMOB_FAKE_SHOW_FAIL", "banner") };
+        app.world_mut().write_message(ShowBanner::default());
+        app.update();
+        assert_eq!(app.world().resource::<AdmobState>().banner_height, 0.0);
+        assert!(!app.world().resource::<AdmobState>().banner_visible);
+
+        unsafe {
+            std::env::remove_var("BEVY_ADMOB_FAKE_SHOW_FAIL");
+            std::env::set_var("BEVY_ADMOB_FAKE_NO_FILL", "banner");
+        }
+        app.world_mut().write_message(ShowBanner::default());
+        app.update();
+        assert_eq!(app.world().resource::<AdmobState>().banner_height, 50.0);
+        app.world_mut().write_message(HideBanner);
+        app.update();
+        assert_eq!(app.world().resource::<AdmobState>().banner_height, 0.0);
     }
 }

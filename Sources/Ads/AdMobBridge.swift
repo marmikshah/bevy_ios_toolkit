@@ -53,6 +53,7 @@ private struct AdMobSharedState {
     var events: [[String: Any]] = []
     var consentStatus: Int32 = 0          // 0 unknown,1 required,2 not-required,3 obtained
     var canRequestAds = false
+    var bannerHeight: Float = 0
     var privacyOptionsRequirement: Int32 = 0 // 0 unknown,1 required,2 not-required
     var eventsJSONPtr: UnsafeMutablePointer<CChar>?
 }
@@ -321,13 +322,33 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     // MARK: Banner
 
     @MainActor
+    func refreshBannerHeight() -> Float {
+        let height: Float
+        if let banner, banner.window != nil, !banner.isHidden {
+            height = Float(banner.bounds.height)
+        } else {
+            height = 0
+        }
+        shared_.withLock { $0.bannerHeight = height }
+        return height
+    }
+
+    func cachedBannerHeight() -> Float { shared_.withLock { $0.bannerHeight } }
+
+    @MainActor
     func showBanner(unitID: String, position: Int32) {
         guard let vc = rootViewController(), let host = vc.view else {
             emit(.banner, "show_failed", error: "no root view")
             return
         }
         banner?.removeFromSuperview()
-        let view = BannerView(adSize: AdSizeBanner)
+        host.layoutIfNeeded()
+        let width = host.safeAreaLayoutGuide.layoutFrame.width
+        guard width > 0 else {
+            emit(.banner, "show_failed", error: "no banner width")
+            return
+        }
+        let view = BannerView(adSize: currentOrientationAnchoredAdaptiveBanner(width: width))
         view.adUnitID = unitID
         view.rootViewController = vc
         let observer = BannerObserver(bridge: self)
@@ -345,8 +366,9 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
             vertical,
         ])
 
-        view.load(Request())
         banner = view
+        host.layoutIfNeeded()
+        view.load(Request())
     }
 
     @MainActor
@@ -468,6 +490,17 @@ public func admob_banner_hide() {
     Task { @MainActor in AdMobBridge.shared.hideBanner() }
 }
 
+@_cdecl("admob_banner_height")
+public func admob_banner_height() -> Float {
+    // Never block a Bevy worker on the main thread: the main thread may be
+    // waiting for that worker to finish its schedule.
+    if Thread.isMainThread {
+        return MainActor.assumeIsolated { AdMobBridge.shared.refreshBannerHeight() }
+    }
+    DispatchQueue.main.async { _ = AdMobBridge.shared.refreshBannerHeight() }
+    return AdMobBridge.shared.cachedBannerHeight()
+}
+
 @_cdecl("admob_request_consent")
 public func admob_request_consent() {
     Task { @MainActor in AdMobBridge.shared.requestConsent() }
@@ -508,6 +541,7 @@ public func admob_init_with_ump_test(
 @_cdecl("admob_show") public func admob_show(_ format: Int32) {}
 @_cdecl("admob_banner_show") public func admob_banner_show(_ unitID: UnsafePointer<CChar>, _ position: Int32) {}
 @_cdecl("admob_banner_hide") public func admob_banner_hide() {}
+@_cdecl("admob_banner_height") public func admob_banner_height() -> Float { 0 }
 @_cdecl("admob_request_consent") public func admob_request_consent() {}
 @_cdecl("admob_present_privacy_options") public func admob_present_privacy_options() {}
 @_cdecl("admob_consent_status") public func admob_consent_status() -> Int32 { 3 }

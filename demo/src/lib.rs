@@ -508,9 +508,10 @@ fn update_status(
     #[cfg(not(target_os = "ios"))]
     let store = "";
     text.0 = format!(
-        "{store}interstitial: {:?} | banner: {} | consent: {:?} | ads-ready: {} | privacy: {:?} | att: {:?} | gc: {:?} | thermal: {:?}{}",
+        "{store}interstitial: {:?} | banner: {} ({:.0}pt) | consent: {:?} | ads-ready: {} | privacy: {:?} | att: {:?} | gc: {:?} | thermal: {:?}{}",
         inventory.state(AdFormat::Interstitial),
         admob.banner_visible,
+        admob.banner_height,
         admob.consent,
         admob.can_request_ads,
         *privacy_options,

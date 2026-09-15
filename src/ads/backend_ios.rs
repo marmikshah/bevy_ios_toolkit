@@ -28,6 +28,8 @@ unsafe extern "C" {
     pub fn admob_banner_show(unit_id: *const c_char, position: i32);
     /// Remove the banner from the view hierarchy.
     pub fn admob_banner_hide();
+    /// Mounted, unhidden banner height in points, or zero when absent.
+    pub fn admob_banner_height() -> f32;
     /// Load and present the UMP consent form if one is required/available.
     pub fn admob_request_consent();
     /// Present the UMP privacy-options form in response to a user action.
