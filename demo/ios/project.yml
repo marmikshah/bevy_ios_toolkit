@@ -2,7 +2,7 @@ name: IosToolkitDemo
 options:
   bundleIdPrefix: com.example
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "26.0"
   createIntermediateGroups: true
 
 settings:

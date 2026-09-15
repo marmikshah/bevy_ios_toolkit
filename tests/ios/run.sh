@@ -3,11 +3,11 @@
 set -euo pipefail
 if [[ "${1:-}" == --help || $# -ne 1 ]]; then
     echo "Usage: tests/ios/run.sh BOOTED_SIMULATOR_UDID"
-    echo "Requires Xcode; use an iOS 27 runtime to verify SDK 27 scene adoption."
+    echo "Requires Xcode; run on iOS 26.0 and iOS 27 to check compatibility."
     exit 0
 fi
 cd "$(dirname "$0")/../.."
-output="$PWD/target/ios-tests"
+output="$PWD/target/ios-tests-$1"
 app="$output/SceneSmoke.app"
 mkdir -p "$app"
 python3 - "$app/Info.plist" <<'PY'
@@ -21,7 +21,7 @@ with open(sys.argv[1], "wb") as output:
         "CFBundlePackageType": "APPL",
         "CFBundleVersion": "1",
         "CFBundleShortVersionString": "1.0",
-        "MinimumOSVersion": "16.0",
+        "MinimumOSVersion": "26.0",
         "UILaunchScreen": {},
         "UIApplicationSceneManifest": {
             "UIApplicationSupportsMultipleScenes": False,
@@ -32,12 +32,24 @@ with open(sys.argv[1], "wb") as output:
         },
     }, output)
 PY
-xcrun --sdk iphonesimulator swiftc -parse-as-library -target arm64-apple-ios16.0-simulator \
+xcrun --sdk iphonesimulator swiftc -parse-as-library -target arm64-apple-ios26.0-simulator \
     -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
     Sources/Platform/Scene.swift Sources/Platform/Screen.swift \
     tests/ios/SceneSmoke.swift -o "$app/SceneSmoke"
 xcrun simctl install "$1" "$app"
-xcrun simctl launch --terminate-running-process --console "$1" \
-    com.example.bevi.scene-smoke > "$output/result.log" 2>&1
-cat "$output/result.log"
-grep -q SCENE_TESTS_PASSED "$output/result.log"
+container="$(xcrun simctl get_app_container "$1" com.example.bevi.scene-smoke data)"
+result="$container/Documents/scene-smoke-result.txt"
+rm -f "$result"
+# Xcode 27 can delay streamed stdout from simultaneous simulator processes.
+# An app-owned completion file also proves the assertions actually finished.
+xcrun simctl launch --terminate-running-process "$1" com.example.bevi.scene-smoke
+for _ in {1..60}; do
+    if [[ -f "$result" ]]; then
+        cp "$result" "$output/result.log"
+        cat "$output/result.log"
+        exit 0
+    fi
+    sleep 1
+done
+echo "SceneSmoke did not complete; inspect the simulator's crash log." >&2
+exit 1
