@@ -1,9 +1,9 @@
 //! StoreKit 2 in-app purchases as Bevy resources + messages.
 //!
 //! Flow:
-//! 1. On iOS, read [`AppStoreEnvironment`] to choose non-production service
-//!    configuration for Xcode, sandbox, or unavailable execution. Wait while
-//!    it is [`AppStoreEnvironment::Pending`]. The resource is absent off iOS.
+//! 1. On iOS, send [`RequestAppStoreEnvironment`] when ready for StoreKit's
+//!    possible sign-in sheet, then wait for [`AppStoreEnvironment`] to resolve
+//!    before choosing service configuration. Reading it does not start work.
 //! 2. Insert [`StoreConfig`] with your product ids. The plugin calls into the
 //!    backend once, which fetches products and the current entitlements.
 //! 3. Read [`StoreProducts`] for prices/titles to render your store UI.
@@ -17,8 +17,8 @@
 
 use std::ffi::{CStr, CString, c_char};
 
-pub use crate::store_environment::AppStoreEnvironment;
-use crate::store_environment::environment_from_raw;
+pub use crate::store_environment::{AppStoreEnvironment, RequestAppStoreEnvironment};
+use crate::store_environment::{environment_from_raw, take_environment_request};
 use bevy::prelude::*;
 
 #[path = "backend_ios.rs"]
@@ -230,17 +230,23 @@ impl Plugin for StorePlugin {
             );
 
         app.init_resource::<AppStoreEnvironment>()
-            .add_systems(Update, (init_environment_once, poll_environment).chain());
+            .add_message::<RequestAppStoreEnvironment>()
+            .add_systems(
+                Update,
+                (
+                    take_environment_request.pipe(init_environment_once),
+                    poll_environment,
+                )
+                    .chain(),
+            );
     }
 }
 
-/// Start environment resolution even when the consumer has no products.
-fn init_environment_once(mut initialized: Local<bool>) {
-    if *initialized {
-        return;
+/// Start only after an explicit request, independently of configured products.
+fn init_environment_once(In(requested): In<bool>) {
+    if requested {
+        init_environment();
     }
-    init_environment();
-    *initialized = true;
 }
 
 /// Publish the immutable terminal environment exactly once.

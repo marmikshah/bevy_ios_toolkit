@@ -84,6 +84,8 @@ pub fn run() {
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 enum Action {
     #[cfg(target_os = "ios")]
+    StoreEnvironment,
+    #[cfg(target_os = "ios")]
     Purchase,
     #[cfg(target_os = "ios")]
     Restore,
@@ -101,6 +103,8 @@ enum Action {
 }
 
 const ROWS: &[(&str, Action)] = &[
+    #[cfg(target_os = "ios")]
+    ("Check App Store Environment", Action::StoreEnvironment),
     #[cfg(target_os = "ios")]
     ("Buy: Remove Ads", Action::Purchase),
     #[cfg(target_os = "ios")]
@@ -229,12 +233,16 @@ fn on_store_button_press(
     entitlements: Res<Entitlements>,
     mut purchase: MessageWriter<PurchaseRequest>,
     mut restore: MessageWriter<RestoreRequest>,
+    mut environment: MessageWriter<RequestAppStoreEnvironment>,
 ) {
     for (interaction, action) in buttons.iter() {
         if *interaction != Interaction::Pressed || !activity.is_idle() {
             continue;
         }
         match action {
+            Action::StoreEnvironment => {
+                environment.write(RequestAppStoreEnvironment);
+            }
             Action::Purchase
                 if entitlements.is_ready()
                     && !entitlements.owns(REMOVE_ADS)
