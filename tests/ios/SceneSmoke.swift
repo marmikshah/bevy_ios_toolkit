@@ -31,6 +31,9 @@ enum SceneSmoke {
                 let root = UIViewController()
                 root.view.backgroundColor = .systemGreen
                 host.rootViewController = root
+                // winit's fullscreen path calls setScreen: before presentation.
+                // iOS 26 may create a non-nil placeholder windowScene here.
+                host.screen = UIScreen.main
                 window = host
                 host.makeKeyAndVisible()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -45,6 +48,8 @@ enum SceneSmoke {
         guard let scene = host.windowScene else {
             preconditionFailure("winit window was not attached before presentation")
         }
+        precondition(UIApplication.shared.connectedScenes.contains(scene),
+                     "winit window kept UIKit's legacy placeholder scene")
         precondition(host.isKeyWindow && !host.isHidden)
         precondition(host.rootViewController === root)
         precondition(host.frame == scene.coordinateSpace.bounds)
@@ -60,10 +65,18 @@ enum SceneSmoke {
         // Windows shown after willConnect must attach on their first show too.
         let later = TestWinitWindow(frame: .zero)
         later.rootViewController = UIViewController()
+        later.screen = UIScreen.main
         later.makeKeyAndVisible()
         precondition(later.windowScene === scene)
         precondition(later.frame == scene.coordinateSpace.bounds)
         later.isHidden = true
+
+        let orphan = TestWinitWindow(frame: .zero)
+        orphan.rootViewController = UIViewController()
+        orphan.makeKeyAndVisible()
+        precondition(orphan.windowScene === scene)
+        precondition(orphan.frame == scene.coordinateSpace.bounds)
+        orphan.isHidden = true
 
         let ordinary = UIWindow(frame: .zero)
         ordinary.makeKeyAndVisible()
@@ -71,6 +84,8 @@ enum SceneSmoke {
         ordinary.isHidden = true
         host.makeKeyAndVisible() // repeat must call through without recursion
         precondition(host.windowScene === scene)
+        precondition(host.bounds.size == CGSize(width: 320, height: 480),
+                     "an already connected window was resized")
 
         // A worker must finish while the main thread waits, without a sync
         // dispatch deadlock. It receives the measurement cached above.
