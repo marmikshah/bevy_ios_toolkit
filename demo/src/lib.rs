@@ -32,16 +32,13 @@ pub fn run() {
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
             title: "bevy_ios_toolkit demo".into(),
-            // iOS: fill the device screen at its native resolution. Without
-            // this Bevy keeps its default 1280x720 window, which iOS then
-            // letterboxes — pushing the UI off-screen. Desktop stays a normal
-            // resizable window.
+            // winit reads startup dimensions as points before it knows the
+            // display scale. Query before a window or scene exists.
             #[cfg(target_os = "ios")]
-            mode: bevy::window::WindowMode::BorderlessFullscreen(
-                bevy::window::MonitorSelection::Primary,
-            ),
-            #[cfg(target_os = "ios")]
-            resizable: false,
+            resolution: {
+                let size = platform::screen_size();
+                (size.x as u32, size.y as u32).into()
+            },
             #[cfg(target_os = "ios")]
             prefers_home_indicator_hidden: true,
             #[cfg(target_os = "ios")]

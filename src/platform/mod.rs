@@ -31,11 +31,13 @@ pub mod lifecycle;
 pub mod links;
 pub mod power;
 pub mod safe_area;
+mod screen;
 pub mod share;
 
 pub use haptics::Haptic;
 pub use lifecycle::{audio, boot_shield};
 pub use power::{PowerState, PowerStateChanged, ThermalState};
+pub use screen::screen_size;
 
 /// Wires the polled parts of this module. Installed by
 /// [`IosPlugin`](crate::IosPlugin); the fire-and-forget functions need none of
