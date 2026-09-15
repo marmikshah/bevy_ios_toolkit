@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#
+# Installed by mlab's install-hooks.sh. Do not edit here — edit it in mlab and
+# reinstall.
+#
+# Commits carry the configured human identity only — no AI authors, co-authors,
+# or tool trailers. This is the earliest place the rule can be enforced: the
+# message exists here, before the commit does, so the fix is retyping a line
+# rather than rewriting history.
+#
+# Its server-side twin is the hygiene step in the gate, which --no-verify cannot
+# reach.
+
+set -euo pipefail
+
+hook_dir="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+scan="$hook_dir/commit-scan.sh"
+[ -x "$scan" ] || exit 0   # Not installed alongside; the gate still covers it.
+
+if hits="$("$scan" --message "$1")"; then
+  exit 0
+fi
+
+echo "commit-msg: refusing AI attribution in the commit message:" >&2
+echo "$hits" >&2
+exit 1
