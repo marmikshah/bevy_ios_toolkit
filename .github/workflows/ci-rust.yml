@@ -32,6 +32,7 @@ jobs:
         run: .githooks/commit-scan.sh --range "$RANGE_BASE..$RANGE_HEAD"
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-08
         with:
+          toolchain: stable
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3 # v2
       - run: bin/check.sh --library
