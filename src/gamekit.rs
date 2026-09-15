@@ -210,7 +210,8 @@ fn poll_auth(mut gc: ResMut<GameCenter>, mut changed: MessageWriter<GameCenterAu
     }
 }
 
-#[cfg(test)]
+// These tests inspect the desktop fake's recorded calls.
+#[cfg(all(test, not(target_os = "ios")))]
 mod tests {
     use super::*;
 

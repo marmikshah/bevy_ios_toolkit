@@ -93,3 +93,14 @@ activity and terminal result, plus the other toolkit integrations:
 
 For a real (non-test) build, swap the test ad ids for your own and turn off
 `AdmobConfig::use_test_ads`.
+
+## Simulator regression checks
+
+After building and installing the demo, run `tests/ios/demo.sh SIMULATOR_UDID`
+from the repository root. It checks rendered controls, deferred environment
+resolution, mounted banner height, touch input, and background/foreground
+recovery. Screenshots and XCTest results go in `target/`. Run on both iOS 26
+and iOS 27; the same SDK 27 build must work on both. `tests/ios/run.sh` separately
+checks scene attachment and startup/window measurements without the ad SDK.
+The UI test sets `BEVY_IOS_TOOLKIT_DEMO_QA=1` to use UMP's test-only `Other`
+geography and reset cached consent, so ad readiness is independent of location.
