@@ -9,20 +9,46 @@ final class DemoSmoke: XCTestCase {
         let bounds: CGRect
     }
 
-    func labels(in app: XCUIApplication) throws -> [Label] {
-        let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .accurate
-        let handler = VNImageRequestHandler(cgImage: app.screenshot().image.cgImage!)
-        try handler.perform([request])
-        return (request.results ?? []).compactMap { result in
-            result.topCandidates(1).first.map { Label(text: $0.string, bounds: result.boundingBox) }
+    func recognize(_ data: Data, regions: [CGRect]) throws -> [Label] {
+        let requests = regions.map { region in
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = .accurate
+            request.recognitionLanguages = ["en-US"] // the demo's labels are English
+            request.regionOfInterest = region
+            return request
         }
+        try VNImageRequestHandler(data: data).perform(requests)
+        return requests.flatMap { request in
+            (request.results ?? []).compactMap { result in
+                result.topCandidates(1).first.map { Label(text: $0.string, bounds: result.boundingBox) }
+            }
+        }
+    }
+
+    func labels() throws -> [Label] {
+        try recognize(XCUIScreen.main.screenshot().pngRepresentation,
+                      regions: [CGRect(x: 0, y: 0, width: 1, height: 1)])
+    }
+
+    func statusText(in app: XCUIApplication) throws -> String {
+        var regions = [CGRect(x: 0, y: 0, width: 1, height: 1)]
+        if app.frame.width > 600 {
+            // Read long iPad status lines in shorter regions for OCR.
+            regions += [CGRect(x: 0, y: 0.75, width: 0.5, height: 0.25),
+                        CGRect(x: 0.5, y: 0.75, width: 0.5, height: 0.25)]
+        }
+        return try recognize(XCUIScreen.main.screenshot().pngRepresentation, regions: regions)
+            .map(\.text).joined(separator: " ")
     }
 
     func waitFor(_ text: String, in app: XCUIApplication) throws -> Label {
         var previous: CGRect?
-        for _ in 0..<30 {
-            if let label = try labels(in: app).first(where: {
+        for attempt in 0..<30 {
+            let visible = try labels()
+            if attempt == 0 {
+                print("Looking for '\(text)': \(visible.map(\.text).joined(separator: " | "))")
+            }
+            if let label = visible.first(where: {
                 $0.text.localizedCaseInsensitiveContains(text)
             }) {
                 // Foreground state can arrive during SpringBoard's zoom
@@ -38,7 +64,7 @@ final class DemoSmoke: XCTestCase {
             }
             Thread.sleep(forTimeInterval: 1)
         }
-        let visible = try labels(in: app).map(\.text).joined(separator: " | ")
+        let visible = try labels().map(\.text).joined(separator: " | ")
         XCTFail("Missing rendered text '\(text)'; saw: \(visible)")
         throw NSError(domain: "DemoSmoke", code: 1)
     }
@@ -53,7 +79,7 @@ final class DemoSmoke: XCTestCase {
     func waitForStatus(_ text: String, in app: XCUIApplication) throws -> String {
         var visible = ""
         for _ in 0..<30 {
-            visible = try labels(in: app).map(\.text).joined(separator: " ")
+            visible = try statusText(in: app)
             if containsStatus(text, in: visible) { return visible }
             Thread.sleep(forTimeInterval: 1)
         }
@@ -67,7 +93,7 @@ final class DemoSmoke: XCTestCase {
         return compact.contains(text.filter { !$0.isWhitespace }.lowercased())
     }
 
-    func resolveTestConsent(in app: XCUIApplication) throws {
+    func resolveConsent(in app: XCUIApplication) throws {
         try tap("Request Ad Consent", in: app)
         for _ in 0..<30 {
             let denyTracking = app.alerts.buttons["Ask App Not to Track"]
@@ -81,8 +107,8 @@ final class DemoSmoke: XCTestCase {
                 systemDeny.tap()
                 continue
             }
-            let visible = try labels(in: app)
-            if containsStatus("ads-ready: true", in: visible.map(\.text).joined(separator: " ")) {
+            let visible = try labels()
+            if containsStatus("ads-ready: true", in: try statusText(in: app)) {
                 return
             }
             // UMP can still present its sample form outside the EEA. Exercise
@@ -97,12 +123,12 @@ final class DemoSmoke: XCTestCase {
             }
             Thread.sleep(forTimeInterval: 1)
         }
-        capture("consent-unresolved", app: app)
+        capture("consent-unresolved")
         _ = try waitForStatus("ads-ready: true", in: app)
     }
 
-    func capture(_ name: String, app: XCUIApplication) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+    func capture(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
@@ -117,19 +143,18 @@ final class DemoSmoke: XCTestCase {
             return true
         }
         let app = XCUIApplication(bundleIdentifier: "com.marmikshah.playground")
-        app.launchEnvironment["BEVY_IOS_TOOLKIT_DEMO_QA"] = "1"
         app.launch()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 30))
         _ = try waitFor("Toggle Banner", in: app)
-        _ = try waitFor("pending", in: app) // no explicit environment request
+        _ = try waitForStatus("store: pending", in: app) // no explicit environment request
         XCTAssertFalse(app.alerts.firstMatch.exists)
-        capture("launch", app: app)
-        try resolveTestConsent(in: app)
+        capture("launch")
+        try resolveConsent(in: app)
 
         try tap("Toggle Banner", in: app)
         let banner = try waitForStatus("banner: true", in: app)
         XCTAssertNotNil(banner.range(of: #"[1-9][0-9]*\s*pt"#, options: .regularExpression))
-        capture("banner", app: app)
+        capture("banner")
         try tap("Toggle Banner", in: app)
         _ = try waitForStatus("banner: false", in: app)
 
@@ -141,6 +166,6 @@ final class DemoSmoke: XCTestCase {
         _ = try waitForStatus("banner: true", in: app) // rendered state still advances
         try tap("Toggle Banner", in: app)
         _ = try waitForStatus("banner: false", in: app)
-        capture("foreground", app: app)
+        capture("foreground")
     }
 }
