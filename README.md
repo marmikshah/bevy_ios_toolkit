@@ -289,11 +289,11 @@ validated in Xcode with the SDKs linked.
 |--------------------|--------|-----|-----------|
 | 0.5                | 0.19   | 26.0+ | 12.3–12.x (+ UMP 3.x) |
 
-## Authorship
+## Before you rely on it
 
-Much of this project was written by **Claude Opus 4.8** (Anthropic) under human
-direction and review. It is young (0.x): run the tests and validate native iOS
-paths on a real device before relying on it in production. Bug reports and PRs welcome.
+About 99% of this toolkit is AI-generated. I use it in my own projects, and if
+it helps yours, great! Until v1, please treat it as experimental: read the code,
+test what you use, and expect bugs and breaking changes. Contributions welcome.
 
 ## License
 
