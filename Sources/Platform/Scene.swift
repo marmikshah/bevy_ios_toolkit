@@ -25,7 +25,8 @@ extension UIWindow {
     @objc fileprivate dynamic func bevyToolkit_makeKeyAndVisible() {
         // Ad SDKs, keyboards, boot shields, and scene-aware windows keep their
         // original behavior. This workaround owns only winit 0.30's orphan.
-        if windowScene == nil,
+        let connected = windowScene.map { UIApplication.shared.connectedScenes.contains($0) } ?? false
+        if !connected,
            let winitClass = NSClassFromString("WinitUIWindow"), isKind(of: winitClass) {
             if let scene = SceneConnection.scene {
                 windowScene = scene
@@ -54,7 +55,7 @@ public final class BevyIosToolkitSceneDelegate: NSObject, UIWindowSceneDelegate 
         SceneConnection.install()
         let pending = SceneConnection.pending.allObjects
         SceneConnection.pending.removeAllObjects()
-        for window in pending where window.windowScene == nil {
+        for window in pending {
             window.makeKeyAndVisible()
         }
     }
