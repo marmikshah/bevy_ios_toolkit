@@ -99,7 +99,7 @@ For a real (non-test) build, swap the test ad ids for your own and turn off
 After building and installing the demo, run `tests/ios/demo.sh SIMULATOR_UDID`
 from the repository root. It checks rendered controls, deferred environment
 resolution, mounted banner height, touch input, and background/foreground
-recovery. Screenshots and XCTest results go in `target/`. Run on both iOS 26.0
+recovery. Screenshots and XCTest results go in `target/`. Run on both iOS 26.x
 and iOS 27; the same SDK 27 build must work on both. `tests/ios/run.sh` separately
 checks scene attachment and startup/window measurements without the ad SDK.
 StoreKit uses Marmik's Playground (`com.marmikshah.playground`) and its live

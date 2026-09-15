@@ -1,18 +1,63 @@
-#!/bin/sh
-# Canonical pre-push hook: refuse direct master pushes, then mirror CI.
-# Enable with `git config core.hooksPath .githooks`.
-# Bypass in an emergency with --no-verify.
-set -e
+#!/usr/bin/env bash
+#
+# Installed by mlab's install-hooks.sh. Do not edit here — edit it in mlab and
+# reinstall.
+#
+# Two things, both the local half of a rule the server also enforces:
+#
+#   - master is never pushed to directly. A pull request is the only way in.
+#     Branch protection enforces this for real; this catches it a second earlier,
+#     before the push, with a message that says what to do instead.
+#   - no AI attribution in the commits being pushed.
+#
+# The one exception: a repository with no master yet has nothing a pull
+# request could target, so bin/new-repo.sh's own bootstrap push is let
+# through. Git hands this hook the push destination as $2; if that remote has
+# no refs/heads/master, this is the first push and not a bypass of anything.
 
-# Nobody pushes master directly — trunk is PR + squash/rebase only.
-while read -r _local_ref _local_sha remote_ref _remote_sha; do
-	case "$remote_ref" in
-	refs/heads/master)
-		echo "pre-push: refusing a direct push to master — open a PR instead." >&2
-		exit 1
-		;;
-	esac
+set -euo pipefail
+
+hook_dir="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+scan="$hook_dir/commit-scan.sh"
+remote_location="${2:-}"
+
+readonly EMPTY=0000000000000000000000000000000000000000
+status=0
+
+# stdin is: <local ref> <local sha> <remote ref> <remote sha>, one per push ref.
+while read -r _local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = refs/heads/master ]; then
+    ls_status=0
+    [ -n "$remote_location" ] \
+      && git ls-remote --exit-code "$remote_location" refs/heads/master >/dev/null 2>&1 \
+      || ls_status=$?
+    if [ "$ls_status" -ne 2 ]; then
+      echo "pre-push: refusing to push straight to master." >&2
+      echo "pre-push: branch off it, open a pull request, and let the gate run." >&2
+      exit 1
+    fi
+    echo "pre-push: $remote_location has no master yet — allowing the bootstrap push." >&2
+  fi
+
+  [ "$local_sha" = "$EMPTY" ] && continue      # deleting a branch pushes nothing
+  [ -x "$scan" ] || continue                   # not installed alongside; the gate still covers it
+
+  if [ "$remote_sha" = "$EMPTY" ]; then
+    # A new branch. Scan what it adds over the default branch rather than its
+    # whole ancestry, which is already on the remote and already scanned.
+    base="$(git merge-base "$local_sha" refs/remotes/origin/HEAD 2>/dev/null || true)"
+    range="${base:+$base..}$local_sha"
+  else
+    range="$remote_sha..$local_sha"
+  fi
+
+  if hits="$("$scan" --range "$range")"; then
+    continue
+  fi
+  echo "pre-push: AI attribution in commits being pushed ($range):" >&2
+  echo "$hits" >&2
+  status=1
 done
 
-make ci
-make test
+[ "$status" -eq 0 ] || echo "pre-push: rewrite those messages before pushing" >&2
+exit "$status"

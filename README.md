@@ -13,7 +13,7 @@ ECS resources and messages. One crate, one plugin, a **feature per integration**
 | `platform` | `platform` | haptics, safe-area insets, outbound links, share sheet, thermal/low-power state |
 | `notifications` | `notifications` | local user notifications (no APNs) |
 
-> **Status: experimental (0.5, pre-release).** APIs will move. Live behaviour
+> **Status: experimental (0.6, pre-v1).** APIs will move. Live behaviour
 > needs a real device, the relevant Apple/Google setup, and the matching Swift
 > shim linked from the companion SPM package — see "iOS integration".
 
@@ -42,10 +42,10 @@ of misbehaving at runtime.
 
 ```toml
 [dependencies]
-bevy_ios_toolkit = { version = "0.5", features = ["ads", "att"] }
+bevy_ios_toolkit = { version = "0.6", features = ["ads", "att"] }
 
 [target.'cfg(target_os = "ios")'.dependencies]
-bevy_ios_toolkit = { version = "0.5", features = ["storekit"] }
+bevy_ios_toolkit = { version = "0.6", features = ["storekit"] }
 ```
 
 ## Quick start
@@ -267,10 +267,10 @@ exists to let you test.
 ## Testing
 
 ```bash
-cargo test --features all
+bin/check.sh # formatting, strict linting, and tests; --help for scope
 cargo run --example ads   --features ads
 cargo check --target aarch64-apple-ios --features storekit
-tests/ios/run.sh BOOTED_SIMULATOR_UDID # UIKit checks; run on iOS 26.0 and 27
+tests/ios/run.sh BOOTED_SIMULATOR_UDID # UIKit checks; run on iOS 26.x and 27
 ```
 
 The applicable fakes are env-tunable (force no-fill, show-failures, consent
@@ -287,7 +287,7 @@ validated in Xcode with the SDKs linked.
 
 | `bevy_ios_toolkit` | `bevy` | iOS | AdMob SDK |
 |--------------------|--------|-----|-----------|
-| 0.5                | 0.19   | 26.0+ | 12.3–12.x (+ UMP 3.x) |
+| 0.6                | 0.19   | 26.0+ | 12.3–12.x (+ UMP 3.x) |
 
 ## Before you rely on it
 

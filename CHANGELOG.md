@@ -5,6 +5,37 @@ format loosely [Keep a Changelog](https://keepachangelog.com). Entries begin
 from the point this file was added — earlier releases live in the crates.io
 version history and the git log.
 
+## 0.6.0 — Unreleased
+
+### Added
+- Expose `AdmobState::banner_height` as the mounted banner's height in UIKit
+  points, including reserved space before an ad fills.
+- Add `platform::screen_size()` for startup screen and current window bounds
+  in points, with cached, non-blocking reads from worker threads.
+- Provide `BevyIosToolkitSceneDelegate` and attach winit windows to UIKit scenes,
+  including windows created before the scene connects.
+
+### Changed
+- Require an explicit `RequestAppStoreEnvironment` message to query the App
+  Store environment. Reading the resource leaves it pending; product loading
+  and entitlement reconciliation still start independently at launch.
+- Set the minimum supported iOS version to 26.0. Native integration tests pass
+  on iOS 26.2 iPhone and iPad, and iOS 27 iPhone.
+- Use repository-owned CI workflows and checked-in dependency lockfiles. Run the
+  portable checks with `bin/check.sh`.
+
+### Fixed
+- Size banners adaptively and derive visibility from native state, so a failed
+  mount does not reserve space.
+- Preserve full-window rendering and input after background/foreground with
+  SDK 27 scene lifecycle support.
+
+### Upgrading from 0.5
+- Send `RequestAppStoreEnvironment` when ready for a possible sign-in prompt.
+- For SDK 27 builds, enable `platform`, link the Swift `Platform` product, and
+  copy the demo's `UIApplicationSceneManifest` into the app's configuration.
+- Use matching 0.6 versions of the Rust crate and Swift package.
+
 ## 0.5.0 — 2026-08-26
 
 ### Added

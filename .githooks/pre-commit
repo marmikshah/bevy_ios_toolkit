@@ -1,5 +1,31 @@
-#!/bin/sh
-# Canonical pre-commit hook: the same gate, locally and fast.
-# Installed by the workspace `make` bootstrap (git config core.hooksPath .githooks).
-# Bypass in an emergency with --no-verify.
-exec make pre-commit-checks
+#!/usr/bin/env bash
+#
+# Installed by mlab's install-hooks.sh. Do not edit here — edit it in mlab and
+# reinstall, or ten repositories will each have a slightly different idea of
+# what a clean commit is.
+#
+# Catches the two mistakes that are expensive to undo: a secret entering the
+# history, and a key file entering the history. Everything slower belongs in the
+# hosted gate, which is confirmation rather than first discovery.
+
+set -euo pipefail
+
+staged="$(git diff --cached --name-only --diff-filter=ACM)"
+[ -n "$staged" ] || exit 0
+
+blocked=""
+while IFS= read -r path; do
+  case "$path" in
+    .env|*/.env|*.p8|*.p12|*.mobileprovision)
+      blocked="${blocked:+$blocked }$path" ;;
+  esac
+done <<< "$staged"
+
+if [ -n "$blocked" ]; then
+  echo "pre-commit: refusing to commit secret material:" >&2
+  for path in $blocked; do echo "  $path" >&2; done
+  echo "pre-commit: add it to .gitignore; if it is already tracked, git rm --cached it" >&2
+  exit 1
+fi
+
+exit 0

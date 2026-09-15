@@ -1,37 +1,37 @@
-name: CI
+name: Rust CI
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_call:
+    inputs:
+      kind:
+        description: Repository kind
+        type: string
+        required: true
 
 permissions:
   contents: read
 
 jobs:
-  ci:
-    uses: ./.github/workflows/ci-rust.yml
-    with:
-      kind: lib
-
-  demo:
+  gate:
+    name: gate
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:
-      group: demo-${{ github.repository }}-${{ github.ref }}
+      group: ci-${{ github.repository }}-${{ github.ref }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - name: Install Linux build deps for Bevy
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+      - name: Check commit messages
+        env:
+          RANGE_BASE: ${{ github.event.pull_request.base.sha }}
+          RANGE_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: .githooks/commit-scan.sh --range "$RANGE_BASE..$RANGE_HEAD"
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-08
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3 # v2
-        with:
-          workspaces: demo
-      - run: bin/check.sh --demo
+      - run: bin/check.sh --library
