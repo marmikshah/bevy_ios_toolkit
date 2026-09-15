@@ -13,7 +13,7 @@ import PackageDescription
 // app; the shims carry none of it.
 let package = Package(
     name: "BevyIosToolkit",
-    platforms: [.iOS(.v16)],
+    platforms: [.iOS("26.0")],
     products: [
         .library(name: "Platform", targets: ["Platform"]),
         .library(name: "Store", targets: ["Store"]),

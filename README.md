@@ -270,7 +270,7 @@ exists to let you test.
 cargo test --features all
 cargo run --example ads   --features ads
 cargo check --target aarch64-apple-ios --features storekit
-tests/ios/run.sh BOOTED_SIMULATOR_UDID # UIKit scene/screen checks; use iOS 27
+tests/ios/run.sh BOOTED_SIMULATOR_UDID # UIKit checks; run on iOS 26.0 and 27
 ```
 
 The applicable fakes are env-tunable (force no-fill, show-failures, consent
@@ -287,7 +287,7 @@ validated in Xcode with the SDKs linked.
 
 | `bevy_ios_toolkit` | `bevy` | iOS | AdMob SDK |
 |--------------------|--------|-----|-----------|
-| 0.5                | 0.19   | 16+ | 12.3–12.x (+ UMP 3.x) |
+| 0.5                | 0.19   | 26.0+ | 12.3–12.x (+ UMP 3.x) |
 
 ## Authorship
 

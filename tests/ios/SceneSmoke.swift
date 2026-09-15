@@ -82,7 +82,11 @@ enum SceneSmoke {
             finished.signal()
         }
         precondition(finished.wait(timeout: .now() + 2) == .success)
-        print("SCENE_TESTS_PASSED: startup points, attachment, scope, resize, worker polling")
+        let result = "SCENE_TESTS_PASSED: startup points, attachment, scope, resize, worker polling"
+        let file = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("scene-smoke-result.txt")
+        try! result.write(to: file, atomically: true, encoding: .utf8)
+        print(result)
         exit(0)
     }
 }
