@@ -143,7 +143,7 @@ fn poll_status(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "ios")))]
 mod tests {
     use super::*;
 

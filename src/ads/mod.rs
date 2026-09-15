@@ -730,7 +730,8 @@ fn poll_backend(
     }
 }
 
-#[cfg(test)]
+// These tests drive the desktop fake; native behavior is covered by the demo.
+#[cfg(all(test, not(target_os = "ios")))]
 mod tests {
     use super::*;
 

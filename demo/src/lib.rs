@@ -77,6 +77,14 @@ pub fn run() {
         ),
     );
 
+    // UI regression runs use UMP's supported test geography so the banner
+    // checks do not depend on the runner's location or cached consent.
+    if std::env::var_os("BEVY_IOS_TOOLKIT_DEMO_QA").is_some() {
+        app.insert_resource(UmpTestConfig {
+            geography: Some(UmpDebugGeography::Other),
+            reset_consent_on_start: true,
+        });
+    }
     app.run();
 }
 
