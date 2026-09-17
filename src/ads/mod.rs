@@ -3,7 +3,9 @@
 //! Flow:
 //! 1. Insert [`AdmobConfig`] with your per-format ad unit ids (or
 //!    [`AdmobConfig::test_ads`] to use Google's official sample units). The
-//!    plugin calls into the backend once to start the Mobile Ads SDK.
+//!    plugin automatically requests ATT and waits for a resolved decision.
+//!    The native bridge then refreshes UMP; Mobile Ads starts only when UMP
+//!    permits ads. `ads` includes the Rust `att` feature and Swift `Att` product.
 //! 2. Wait until [`AdmobState::can_request_ads`] is true, presenting
 //!    [`RequestConsent`] first when consent is required.
 //! 3. Send [`LoadAd`] to preload a full-screen format; read [`AdInventory`] —
@@ -17,8 +19,11 @@
 //! initial UMP form when required. If the [`PrivacyOptionsRequirement`]
 //! resource is [`PrivacyOptionsRequirement::Required`], keep a visible action
 //! that sends [`PresentPrivacyOptions`] so the user can revisit their choices.
-//! AdMob requires a valid consent state before serving personalized ads in
-//! regulated regions.
+//! Early consent requests survive the ATT wait. Early ad loads/presentations
+//! emit failures instead of reaching the SDK; retry when readiness is true.
+//! For custom ATT timing, set [`AdmobConfig::tracking_prompt`] to
+//! [`AdTrackingPrompt::Manual`] and send [`RequestTracking`] yourself. Omitting
+//! the ad config entirely leaves both automatic ATT and ad services idle.
 //!
 //! # Desktop fake (non-iOS)
 //!
@@ -40,6 +45,7 @@
 use std::collections::HashMap;
 use std::ffi::CString;
 
+use crate::att::{AttPlugin, AttSystems, RequestTracking, TrackingStatus};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -251,10 +257,25 @@ impl UmpDebugGeography {
 
 // ---------- Resources ----------
 
-/// Ad configuration. Insert before or after adding the plugin; the SDK starts
-/// on the first frame this resource exists.
+/// Who requests ATT when ads are configured. Both modes keep ad startup
+/// blocked until ATT is authorized, denied or restricted.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AdTrackingPrompt {
+    /// Request automatically once a foreground window can present the sheet.
+    #[default]
+    Automatic,
+    /// The game sends [`RequestTracking`] at its chosen time. For captures,
+    /// leave it unsent; an undetermined status keeps ads closed.
+    Manual,
+}
+
+/// Ad configuration. Insert before or after adding the plugin. By default,
+/// ATT is requested first, then the native consent bridge is configured.
+/// The Mobile Ads SDK itself starts only when UMP permits ad requests.
 #[derive(Resource, Clone, Default)]
 pub struct AdmobConfig {
+    /// Automatic by default; manual timing never bypasses authorization.
+    pub tracking_prompt: AdTrackingPrompt,
     /// Ad unit id per format. A format with no entry here falls back to the
     /// Google test unit (so an unconfigured format is never a hard error in
     /// development). In production, set every format you use.
@@ -347,7 +368,8 @@ impl AdInventory {
 /// Coarse SDK + consent + banner state, for UI that needs the big picture.
 #[derive(Resource, Default)]
 pub struct AdmobState {
-    /// The Mobile Ads SDK has been started.
+    /// The native consent bridge has been configured after ATT resolved.
+    /// Mobile Ads startup still waits for UMP readiness.
     pub initialized: bool,
     /// Current UMP consent state.
     pub consent: ConsentStatus,
@@ -543,6 +565,8 @@ fn drain_events() -> Vec<AdEvent> {
 #[derive(Resource, Default)]
 struct AdsPoll {
     inited: bool,
+    tracking_requested: bool,
+    consent_requested: bool,
     consent: ConsentStatus,
 }
 
@@ -550,6 +574,9 @@ pub struct AdsPlugin;
 
 impl Plugin for AdsPlugin {
     fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<AttPlugin>() {
+            app.add_plugins(AttPlugin);
+        }
         app.init_resource::<AdInventory>()
             .init_resource::<AdmobState>()
             .init_resource::<PrivacyOptionsRequirement>()
@@ -570,15 +597,22 @@ impl Plugin for AdsPlugin {
             .add_message::<AdClicked>()
             .add_message::<ConsentUpdated>()
             .add_message::<ConsentInfoUpdateFailed>()
-            .add_systems(Update, (init_once, pump_requests, poll_backend).chain());
+            .add_systems(
+                Update,
+                (init_once, pump_requests, poll_backend)
+                    .chain()
+                    .after(AttSystems),
+            );
     }
 }
 
-/// Start the SDK the first frame a [`AdmobConfig`] exists. Insertion-order
-/// tolerant — the config can land any time.
+/// Request ATT once, then initialize the consent bridge after it resolves.
+/// The native request owns foreground waits and retries; no per-frame prompts.
 fn init_once(
     config: Option<Res<AdmobConfig>>,
     ump_test: Res<UmpTestConfig>,
+    tracking: Res<TrackingStatus>,
+    mut requests: MessageWriter<RequestTracking>,
     mut poll: ResMut<AdsPoll>,
     mut state: ResMut<AdmobState>,
 ) {
@@ -586,6 +620,13 @@ fn init_once(
         return;
     }
     if let Some(config) = config {
+        if !tracking.is_determined() {
+            if config.tracking_prompt == AdTrackingPrompt::Automatic && !poll.tracking_requested {
+                poll.tracking_requested = true;
+                requests.write(RequestTracking);
+            }
+            return;
+        }
         init(&config, *ump_test);
         poll.inited = true;
         state.initialized = true;
@@ -595,7 +636,8 @@ fn init_once(
 /// Forward consumer requests to the backend, resolving unit ids from config.
 #[allow(clippy::too_many_arguments)]
 fn pump_requests(
-    poll: Res<AdsPoll>,
+    mut poll: ResMut<AdsPoll>,
+    tracking: Res<TrackingStatus>,
     config: Option<Res<AdmobConfig>>,
     mut inventory: ResMut<AdInventory>,
     mut loads: MessageReader<LoadAd>,
@@ -604,10 +646,18 @@ fn pump_requests(
     mut banner_hides: MessageReader<HideBanner>,
     mut consents: MessageReader<RequestConsent>,
     mut privacy_options: MessageReader<PresentPrivacyOptions>,
+    mut load_failed: MessageWriter<AdLoadFailed>,
+    mut show_failed: MessageWriter<AdShowFailed>,
 ) {
-    if !poll.inited {
-        return;
+    // A launch-time consent request must survive the asynchronous ATT wait.
+    if consents.read().count() > 0 {
+        poll.consent_requested = true;
     }
+    if poll.inited && poll.consent_requested {
+        poll.consent_requested = false;
+        request_consent();
+    }
+    let ready = poll.inited && tracking.is_determined() && can_request_ads();
     let resolve = |format: AdFormat| {
         config
             .as_ref()
@@ -617,24 +667,47 @@ fn pump_requests(
 
     for LoadAd(format) in loads.read() {
         if format.is_full_screen() {
+            if !ready {
+                inventory.set(*format, AdLoadState::Failed);
+                load_failed.write(AdLoadFailed {
+                    format: *format,
+                    error: "ad request blocked: ATT or UMP is not ready".into(),
+                });
+                continue;
+            }
             inventory.set(*format, AdLoadState::Loading);
             load(*format, &resolve(*format));
         }
     }
     for ShowAd(format) in shows.read() {
-        show(*format);
+        if ready {
+            show(*format);
+        } else {
+            show_failed.write(AdShowFailed {
+                format: *format,
+                error: "ad presentation blocked: ATT or UMP is not ready".into(),
+            });
+        }
     }
     for ShowBanner { position } in banner_shows.read() {
-        banner_show(&resolve(AdFormat::Banner), *position);
+        if ready {
+            banner_show(&resolve(AdFormat::Banner), *position);
+        } else {
+            show_failed.write(AdShowFailed {
+                format: AdFormat::Banner,
+                error: "banner blocked: ATT or UMP is not ready".into(),
+            });
+        }
     }
     for _ in banner_hides.read() {
-        banner_hide();
-    }
-    for _ in consents.read() {
-        request_consent();
+        if poll.inited {
+            banner_hide();
+        }
     }
     for _ in privacy_options.read() {
-        present_privacy_options();
+        if poll.inited {
+            present_privacy_options();
+        }
     }
 }
 
@@ -764,10 +837,10 @@ mod tests {
     /// The fake backend is a process-global singleton, so tests that drive it
     /// must not run concurrently. Holding this guard serializes them and resets
     /// the fake (and clears env knobs) to a clean slate.
-    static FAKE_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     fn guarded() -> std::sync::MutexGuard<'static, ()> {
-        let g = FAKE_GUARD.lock().unwrap_or_else(|p| p.into_inner());
+        let g = crate::att::test_support::guard();
+        // Existing ad-flow tests begin with an already answered ATT decision.
+        crate::att::test_support::set_status(3);
         backend::reset();
         for key in [
             "BEVY_ADMOB_FAKE_NO_FILL",
@@ -1149,5 +1222,152 @@ mod tests {
         app.world_mut().write_message(HideBanner);
         app.update();
         assert_eq!(app.world().resource::<AdmobState>().banner_height, 0.0);
+    }
+    #[test]
+    fn default_config_starts_ads_without_game_owned_tracking_systems() {
+        let _guard = guarded();
+        crate::att::test_support::set_status(0);
+        let mut app = build_app();
+        app.insert_resource(AdmobConfig::test_ads());
+        for _ in 0..4 {
+            app.update();
+        }
+        assert_eq!(crate::att::test_support::requests(), 1);
+        assert_eq!(backend::initializations(), 1);
+        assert!(app.world().resource::<AdmobState>().can_request_ads);
+    }
+
+    #[test]
+    fn ads_request_tracking_by_default_and_wait_for_the_result() {
+        let _guard = guarded();
+        crate::att::test_support::set_status(0);
+        unsafe { std::env::set_var("BEVY_IOS_FAKE_ATT", "notdetermined") };
+        let mut app = build_app();
+        app.insert_resource(AdmobConfig::test_ads());
+        for _ in 0..8 {
+            app.update();
+            assert!(!app.world().resource::<AdmobState>().initialized);
+        }
+        assert_eq!(crate::att::test_support::requests(), 1);
+        assert_eq!(backend::initializations(), 0);
+        // The native callback can resolve while no new Bevy request is sent.
+        crate::att::test_support::set_status(2);
+        app.update();
+        assert!(app.world().resource::<AdmobState>().initialized);
+        assert_eq!(backend::initializations(), 1);
+        app.update();
+        assert_eq!(backend::initializations(), 1);
+    }
+
+    #[test]
+    fn every_existing_att_decision_skips_the_prompt_and_starts_ads() {
+        let _guard = guarded();
+        for status in [1, 2, 3] {
+            backend::reset();
+            crate::att::test_support::set_status(status);
+            let mut app = build_app();
+            app.insert_resource(AdmobConfig::test_ads());
+            app.update();
+            assert!(app.world().resource::<AdmobState>().initialized);
+            assert_eq!(crate::att::test_support::requests(), 0);
+        }
+    }
+
+    #[test]
+    fn manual_prompt_and_absent_config_never_start_tracking_implicitly() {
+        let _guard = guarded();
+        crate::att::test_support::set_status(0);
+        let mut app = build_app();
+        for _ in 0..4 {
+            app.update();
+        }
+        assert_eq!(crate::att::test_support::requests(), 0);
+        app.insert_resource(AdmobConfig {
+            tracking_prompt: AdTrackingPrompt::Manual,
+            ..AdmobConfig::test_ads()
+        });
+        for _ in 0..4 {
+            app.update();
+        }
+        assert_eq!(crate::att::test_support::requests(), 0);
+        assert_eq!(backend::initializations(), 0);
+        app.world_mut().write_message(RequestTracking);
+        for _ in 0..4 {
+            app.update();
+        }
+        assert_eq!(crate::att::test_support::requests(), 1);
+        assert!(app.world().resource::<AdmobState>().initialized);
+    }
+
+    #[test]
+    fn early_consent_survives_att_wait_but_ads_are_rejected_until_ready() {
+        let _guard = guarded();
+        crate::att::test_support::set_status(0);
+        let mut app = build_app();
+        app.insert_resource(AdmobConfig {
+            tracking_prompt: AdTrackingPrompt::Manual,
+            ..AdmobConfig::test_ads()
+        });
+        app.world_mut().write_message(RequestConsent);
+        app.world_mut()
+            .write_message(LoadAd(AdFormat::Interstitial));
+        app.world_mut().write_message(ShowBanner::default());
+        for _ in 0..4 {
+            app.update();
+        }
+        assert_eq!(backend::initializations(), 0);
+        assert_eq!(
+            app.world()
+                .resource::<AdInventory>()
+                .state(AdFormat::Interstitial),
+            AdLoadState::Failed
+        );
+        assert!(!app.world().resource::<AdmobState>().banner_visible);
+        unsafe { std::env::set_var("BEVY_ADMOB_FAKE_CONSENT", "required") };
+        crate::att::test_support::set_status(2);
+        app.update();
+        assert_eq!(
+            app.world().resource::<AdmobState>().consent,
+            ConsentStatus::Obtained
+        );
+        assert!(app.world().resource::<AdmobState>().can_request_ads);
+    }
+
+    #[test]
+    fn ump_blocks_banner_and_fullscreen_requests_after_att_is_resolved() {
+        let _guard = guarded();
+        unsafe { std::env::set_var("BEVY_ADMOB_FAKE_CONSENT", "required") };
+        let mut app = build_app();
+        app.insert_resource(AdmobConfig::test_ads());
+        app.update();
+        app.world_mut()
+            .write_message(LoadAd(AdFormat::Interstitial));
+        app.world_mut()
+            .write_message(ShowAd(AdFormat::Interstitial));
+        app.world_mut().write_message(ShowBanner::default());
+        app.update();
+        assert_eq!(app.world().resource::<Messages<AdLoadFailed>>().len(), 1);
+        assert_eq!(app.world().resource::<Messages<AdShowFailed>>().len(), 2);
+        assert!(!app.world().resource::<AdmobState>().banner_visible);
+        app.world_mut().write_message(RequestConsent);
+        app.update();
+        app.world_mut()
+            .write_message(LoadAd(AdFormat::Interstitial));
+        app.world_mut().write_message(ShowBanner::default());
+        app.update();
+        assert!(
+            app.world()
+                .resource::<AdInventory>()
+                .is_loaded(AdFormat::Interstitial)
+        );
+        assert!(app.world().resource::<AdmobState>().banner_visible);
+    }
+
+    #[test]
+    fn ios_plugin_and_ads_plugin_install_att_only_once() {
+        let _guard = guarded();
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, crate::IosPlugin));
+        assert!(app.is_plugin_added::<AttPlugin>());
     }
 }

@@ -15,6 +15,7 @@ use super::{AdEvent, AdFormat};
 
 #[derive(Default)]
 struct Fake {
+    initializations: u32,
     use_test_ads: bool,
     consent: i32,
     can_request_ads: bool,
@@ -73,6 +74,7 @@ pub unsafe fn admob_init_with_ump_test(
     reset_consent: i32,
 ) {
     let mut f = lock();
+    f.initializations += 1;
     f.use_test_ads = use_test_ads != 0;
     f.consent_debug_geography = consent_debug_geography;
     f.reset_consent = reset_consent != 0;
@@ -242,4 +244,9 @@ pub fn privacy_options_presentations() -> u32 {
 pub fn ump_test_config() -> (i32, bool) {
     let fake = lock();
     (fake.consent_debug_geography, fake.reset_consent)
+}
+
+#[cfg(test)]
+pub fn initializations() -> u32 {
+    lock().initializations
 }

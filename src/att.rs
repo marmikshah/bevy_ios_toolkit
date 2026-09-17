@@ -3,7 +3,9 @@
 //! iOS requires the ATT prompt before an app accesses the IDFA for cross-app
 //! tracking — which AdMob uses to serve personalized ads. Send
 //! [`RequestTracking`] (typically once, after the first frame or after your own
-//! pre-prompt) and read [`TrackingStatus`] to branch.
+//! pre-prompt) and read [`TrackingStatus`] to branch. Ads request ATT automatically
+//! unless their configuration explicitly selects manual prompt timing. Native
+//! requests wait for an active window, coalesce, and retry interruptions.
 //!
 //! ```no_run
 //! use bevy::prelude::*;
@@ -44,7 +46,9 @@ mod backend {
 mod backend {
     use std::sync::atomic::{AtomicI32, Ordering};
 
-    static STATUS: AtomicI32 = AtomicI32::new(0);
+    pub(super) static STATUS: AtomicI32 = AtomicI32::new(0);
+    #[cfg(test)]
+    pub(super) static REQUESTS: AtomicI32 = AtomicI32::new(0);
 
     fn env_status() -> i32 {
         match std::env::var("BEVY_IOS_FAKE_ATT")
@@ -61,6 +65,8 @@ mod backend {
     }
 
     pub unsafe fn att_request() {
+        #[cfg(test)]
+        REQUESTS.fetch_add(1, Ordering::SeqCst);
         STATUS.store(env_status(), Ordering::SeqCst);
     }
 
@@ -111,6 +117,9 @@ pub struct RequestTracking;
 #[derive(Message, Clone, Debug)]
 pub struct TrackingStatusChanged(pub TrackingStatus);
 
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct AttSystems;
+
 pub struct AttPlugin;
 
 impl Plugin for AttPlugin {
@@ -118,7 +127,10 @@ impl Plugin for AttPlugin {
         app.init_resource::<TrackingStatus>()
             .add_message::<RequestTracking>()
             .add_message::<TrackingStatusChanged>()
-            .add_systems(Update, (pump_requests, poll_status).chain());
+            .add_systems(
+                Update,
+                (poll_status, pump_requests).chain().in_set(AttSystems),
+            );
     }
 }
 
@@ -148,8 +160,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn standalone_att_does_not_prompt_without_a_request() {
+        let _guard = test_support::guard();
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AttPlugin));
+        for _ in 0..4 {
+            app.update();
+        }
+        assert_eq!(test_support::requests(), 0);
+        assert_eq!(
+            *app.world().resource::<TrackingStatus>(),
+            TrackingStatus::NotDetermined
+        );
+    }
+
+    #[test]
     fn request_resolves_status_and_emits_change() {
-        // SAFETY: single-threaded test; the fake reads this env during this app.
+        let _guard = test_support::guard();
+        // SAFETY: the shared guard serializes ATT and ad fake tests.
         unsafe { std::env::set_var("BEVY_IOS_FAKE_ATT", "denied") };
 
         let mut app = App::new();
@@ -171,9 +199,34 @@ mod tests {
             *app.world().resource::<TrackingStatus>(),
             TrackingStatus::Denied
         );
+        assert_eq!(test_support::requests(), 1);
         assert!(TrackingStatus::Authorized.is_authorized());
         assert!(!TrackingStatus::NotDetermined.is_determined());
 
         unsafe { std::env::remove_var("BEVY_IOS_FAKE_ATT") };
+    }
+}
+
+#[cfg(all(test, not(target_os = "ios")))]
+pub(crate) mod test_support {
+    use super::backend;
+    use std::sync::{Mutex, MutexGuard, atomic::Ordering};
+
+    static GUARD: Mutex<()> = Mutex::new(());
+
+    pub fn guard() -> MutexGuard<'static, ()> {
+        let guard = GUARD.lock().unwrap_or_else(|p| p.into_inner());
+        set_status(0);
+        backend::REQUESTS.store(0, Ordering::SeqCst);
+        unsafe { std::env::remove_var("BEVY_IOS_FAKE_ATT") };
+        guard
+    }
+
+    pub fn set_status(value: i32) {
+        backend::STATUS.store(value, Ordering::SeqCst);
+    }
+
+    pub fn requests() -> i32 {
+        backend::REQUESTS.load(Ordering::SeqCst)
     }
 }

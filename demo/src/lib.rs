@@ -48,7 +48,15 @@ pub fn run() {
         ..default()
     }))
     .add_plugins(IosPlugin)
-    .insert_resource(AdmobConfig::test_ads())
+    .insert_resource(AdmobConfig {
+        // Automatic by default; the ATT button exercises explicit timing.
+        tracking_prompt: if std::env::var("BEVY_DEMO_MANUAL_ATT").as_deref() == Ok("1") {
+            AdTrackingPrompt::Manual
+        } else {
+            AdTrackingPrompt::Automatic
+        },
+        ..AdmobConfig::test_ads()
+    })
     .init_resource::<PendingShow>()
     .add_systems(Startup, setup)
     .add_systems(

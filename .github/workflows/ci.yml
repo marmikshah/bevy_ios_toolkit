@@ -36,3 +36,22 @@ jobs:
         with:
           workspaces: demo
       - run: bin/check.sh --demo
+
+  att:
+    if: github.event.pull_request.draft == false
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - run: tests/att/run.sh
+      - name: Type-check the iOS ATT bridge
+        run: |
+          xcrun --sdk iphonesimulator swiftc -swift-version 6 -typecheck \
+            -target arm64-apple-ios26.0-simulator \
+            -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" Sources/Att/*.swift
+      - name: Build native Ads and transitive Att products
+        run: |
+          xcodebuild -scheme Ads -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath target/swift-build CODE_SIGNING_ALLOWED=NO build

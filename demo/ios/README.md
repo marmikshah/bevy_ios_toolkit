@@ -86,7 +86,9 @@ activity and terminal result, plus the other toolkit integrations:
 - **Toggle Banner** — show / hide the banner.
 - **Request Ad Consent** — UMP consent form.
 - **Privacy Options** — reopens UMP choices when the SDK requires the entry point.
-- **Request Tracking (ATT)** — the App Tracking Transparency prompt.
+- **Request Tracking (ATT)** — explicit request for manual timing. Ads request
+  ATT automatically at launch by default. Set `BEVY_DEMO_MANUAL_ATT=1` to verify
+  that ads remain blocked until this button resolves ATT.
 - **Haptic Tap** / **Ask for Review** — impact haptic / review prompt.
 - **Game Center** — first tap signs in; once signed in, a tap submits a score +
   achievement and opens the dashboard.

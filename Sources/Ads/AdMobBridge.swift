@@ -42,6 +42,7 @@ enum AdFormat: Int32 {
 
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
+import Att
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -64,6 +65,7 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     private let shared_ = OSAllocatedUnfairLock(initialState: AdMobSharedState())
 
     // Touched only on the main actor.
+    @MainActor private var sdkStarted = false
     @MainActor private var interstitial: InterstitialAd?
     @MainActor private var rewarded: RewardedAd?
     @MainActor private var rewardedInterstitial: RewardedInterstitialAd?
@@ -130,6 +132,10 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
         consentDebugGeography: Int32,
         resetConsent: Bool
     ) {
+        guard att_status() != 0 else {
+            NSLog("[admob] initialization blocked until ATT resolves")
+            return
+        }
         if !testDevices.isEmpty {
             MobileAds.shared.requestConfiguration.testDeviceIdentifiers = testDevices
         }
@@ -140,8 +146,14 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
             ConsentInformation.shared.reset()
         }
         #endif
-        MobileAds.shared.start(completionHandler: nil)
         refreshConsentInfo(present: false)
+    }
+
+    @MainActor
+    private func startSDKIfPermitted() {
+        guard !sdkStarted, att_status() != 0, canRequestAdsValue() != 0 else { return }
+        sdkStarted = true
+        MobileAds.shared.start(completionHandler: nil)
     }
 
     // MARK: Consent (UMP)
@@ -194,6 +206,7 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
         setConsentStatus(3) // no UMP: treat as obtained
         shared_.withLock { $0.canRequestAds = true }
         setPrivacyOptionsRequirement(2)
+        startSDKIfPermitted()
         #endif
     }
 
@@ -240,6 +253,7 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
         @unknown default: privacyOptions = 0
         }
         setPrivacyOptionsRequirement(privacyOptions)
+        startSDKIfPermitted()
         #endif
     }
 
@@ -248,6 +262,10 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     @MainActor
     func load(_ format: AdFormat, unitID: String) {
         Task { @MainActor in
+            guard self.sdkStarted, att_status() != 0, self.canRequestAdsValue() != 0 else {
+                self.emit(format, "load_failed", error: "ATT or UMP is not ready")
+                return
+            }
             do {
                 switch format {
                 case .interstitial:
@@ -280,6 +298,10 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
 
     @MainActor
     func show(_ format: AdFormat) {
+        guard sdkStarted, att_status() != 0, canRequestAdsValue() != 0 else {
+            emit(format, "show_failed", error: "ATT or UMP is not ready")
+            return
+        }
         guard let vc = rootViewController() else {
             emit(format, "show_failed", error: "no root view controller")
             return
@@ -337,6 +359,10 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
 
     @MainActor
     func showBanner(unitID: String, position: Int32) {
+        guard sdkStarted, att_status() != 0, canRequestAdsValue() != 0 else {
+            emit(.banner, "show_failed", error: "ATT or UMP is not ready")
+            return
+        }
         guard let vc = rootViewController(), let host = vc.view else {
             emit(.banner, "show_failed", error: "no root view")
             return

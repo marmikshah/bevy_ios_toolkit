@@ -6,14 +6,14 @@ ECS resources and messages. One crate, one plugin, a **feature per integration**
 | feature | module | what it bridges |
 |---------|--------|-----------------|
 | `storekit` | `store` | StoreKit app environment + in-app purchases |
-| `ads` | `ads` | Google AdMob ads + UMP (GDPR) consent |
+| `ads` | `ads` | Google AdMob ads + automatic ATT + UMP consent |
 | `att` | `att` | App Tracking Transparency prompt |
 | `gamekit` | `gamekit` | Game Center auth, leaderboards, achievements |
 | `review` | `review` | StoreKit review prompt |
 | `platform` | `platform` | haptics, safe-area insets, outbound links, share sheet, thermal/low-power state |
 | `notifications` | `notifications` | local user notifications (no APNs) |
 
-> **Status: experimental (0.6, pre-v1).** APIs will move. Live behaviour
+> **Status: experimental (0.7, pre-v1).** APIs will move. Live behaviour
 > needs a real device, the relevant Apple/Google setup, and the matching Swift
 > shim linked from the companion SPM package — see "iOS integration".
 
@@ -42,10 +42,10 @@ of misbehaving at runtime.
 
 ```toml
 [dependencies]
-bevy_ios_toolkit = { version = "0.6", features = ["ads", "att"] }
+bevy_ios_toolkit = { version = "0.7", features = ["ads"] }
 
 [target.'cfg(target_os = "ios")'.dependencies]
-bevy_ios_toolkit = { version = "0.6", features = ["storekit"] }
+bevy_ios_toolkit = { version = "0.7", features = ["storekit"] }
 ```
 
 ## Quick start
@@ -113,16 +113,6 @@ fn gate(entitlements: Res<Entitlements>) {
     }
 }
 
-// Keep progress visible while StoreKit is working. Presentation stays yours.
-#[cfg(target_os = "ios")]
-fn store_progress(activity: Res<StoreActivity>) {
-    match &*activity {
-        StoreActivity::Idle => { /* enable store actions */ }
-        StoreActivity::Purchasing { product_id } => { /* show purchase progress */ }
-        StoreActivity::Restoring => { /* show restore progress */ }
-    }
-}
-
 // Restore completes only after AppStore.sync() and entitlement refresh finish.
 #[cfg(target_os = "ios")]
 fn restore_result(mut completed: MessageReader<RestoreCompleted>) {
@@ -131,20 +121,6 @@ fn restore_result(mut completed: MessageReader<RestoreCompleted>) {
             RestoreOutcome::Success => { /* read Entitlements for restored access */ }
             RestoreOutcome::Failed => { /* offer an explicit retry */ }
         }
-    }
-}
-
-// Wait for StoreKit, then use production service configuration only for the
-// production App Store. Xcode, TestFlight/sandbox, and failures stay on test.
-#[cfg(target_os = "ios")]
-fn choose_service_configuration(environment: Res<AppStoreEnvironment>) {
-    if !environment.is_resolved() {
-        return; // wait before initializing the SDK
-    }
-    if environment.is_production() {
-        /* insert production config */
-    } else {
-        /* insert test config */
     }
 }
 
@@ -172,7 +148,7 @@ are no files to vendor or keep in sync by hand.
    Info.plist configuration. It names `BevyIosToolkitSceneDelegate`; without
    scene adoption UIKit refuses to launch. `IosPlugin` registers it before run.
    Each product links its own system frameworks; `Ads` brings the Google Mobile
-   Ads + UMP SDKs transitively. The symbol prefixes (`store_`, `platform_`, `admob_`,
+   Ads + UMP SDKs and the `Att` product transitively. The symbol prefixes (`store_`, `platform_`, `admob_`,
    `att_`, `gamekit_`, `review_`, `notifications_`) won't collide with your own
    bridge.
 
@@ -188,7 +164,8 @@ are no files to vendor or keep in sync by hand.
 
 3. Per-feature native setup (stays in your app — the package ships none of it):
    - **ads** — set `GADApplicationIdentifier` in `Info.plist` (use `TEST_APP_ID`
-     in dev), add the `SKAdNetworkItems` Google ships, and provide a visible
+     in dev), add `NSUserTrackingUsageDescription` and Google's
+     `SKAdNetworkItems`, and provide a visible
      action that sends `PresentPrivacyOptions` whenever the
      `PrivacyOptionsRequirement` resource is `Required`.
    - **att** — add `NSUserTrackingUsageDescription` to `Info.plist`.
@@ -232,6 +209,22 @@ Use it to disable duplicate actions and keep progress visible until
 the operation result: always read `Entitlements`, including during launch-time
 reconciliation when no user-facing success message should be inferred.
 
+### Ads request ATT automatically
+
+Inserting `AdmobConfig` requests ATT at the first active window if undetermined.
+The native bridge coalesces requests and retries interruptions. Existing allow,
+deny or restricted decisions skip the prompt; all three permit UMP to proceed.
+The Mobile Ads SDK starts only after ATT resolves and UMP permits ad requests.
+Early ad commands emit failures; retry after `AdmobState::can_request_ads` is true.
+`RequestConsent` can be sent early and survives the ATT wait.
+
+For a custom explanation before ATT, set `AdmobConfig::tracking_prompt` to
+`AdTrackingPrompt::Manual`, then send `RequestTracking`. Manual mode does not
+bypass either gate. To capture without prompts or ads, omit `AdmobConfig`.
+An ATT-only app still requests permission explicitly. With ads enabled, games
+need no Swift prompt loop and no separate `Att` product linkage. Keep the Rust
+and Swift dependencies at matching 0.7 versions when migrating from 0.6.
+
 ### Notifications are local, and for a real event
 
 There is no remote push here: no APNs, no device token, no server, and nothing
@@ -268,6 +261,7 @@ exists to let you test.
 
 ```bash
 bin/check.sh # formatting, strict linting, and tests; --help for scope
+tests/att/run.sh # native ATT coordinator: foreground waits, retries, coalescing
 cargo run --example ads   --features ads
 cargo check --target aarch64-apple-ios --features storekit
 tests/ios/run.sh BOOTED_SIMULATOR_UDID # UIKit checks; run on iOS 26.x and 27
@@ -287,7 +281,7 @@ validated in Xcode with the SDKs linked.
 
 | `bevy_ios_toolkit` | `bevy` | iOS | AdMob SDK |
 |--------------------|--------|-----|-----------|
-| 0.6                | 0.19   | 26.0+ | 12.3–12.x (+ UMP 3.x) |
+| 0.7                | 0.19   | 26.0+ | 12.3–12.x (+ UMP 3.x) |
 
 ## Before you rely on it
 
