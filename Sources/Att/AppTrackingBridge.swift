@@ -7,13 +7,30 @@
 
 import Foundation
 
-#if canImport(AppTrackingTransparency)
+#if canImport(AppTrackingTransparency) && canImport(UIKit)
 import AppTrackingTransparency
+import UIKit
+
+@MainActor
+private let trackingRequest = TrackingRequestCoordinator(
+    isDetermined: { ATTrackingManager.trackingAuthorizationStatus != .notDetermined },
+    canPresent: {
+        UIApplication.shared.applicationState == .active
+            && UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .filter { $0.activationState == .foregroundActive }
+                .flatMap { $0.windows }
+                .contains { $0.isKeyWindow && $0.rootViewController != nil
+                    && $0.rootViewController?.presentedViewController == nil }
+    },
+    prompt: { _ = await ATTrackingManager.requestTrackingAuthorization() }
+)
 
 @_cdecl("att_request")
 public func att_request() {
-    // No-op if already determined; iOS shows the system prompt at most once.
-    ATTrackingManager.requestTrackingAuthorization { _ in }
+    // Bevy may call from a worker. UIKit work and duplicate requests are
+    // serialized on the main actor; an interrupted sheet remains pending.
+    Task { @MainActor in await trackingRequest.resolve() }
 }
 
 @_cdecl("att_status")

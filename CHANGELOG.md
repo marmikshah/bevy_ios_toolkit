@@ -5,7 +5,27 @@ format loosely [Keep a Changelog](https://keepachangelog.com). Entries begin
 from the point this file was added — earlier releases live in the crates.io
 version history and the git log.
 
-## 0.6.0 — Unreleased
+## 0.7.0 — Unreleased
+
+### Changed
+- `ads` includes ATT and automatically requests permission when ad configuration
+  is inserted, waiting for an active foreground window. Existing decisions skip
+  the prompt; interrupted requests retry and concurrent calls share one request.
+- Ad startup waits for ATT; Mobile Ads initialization and ad requests also wait
+  for UMP readiness. Early ad commands report failures rather than reaching the
+  SDK. Early consent requests survive the ATT wait.
+- `AdmobState::initialized` means the consent bridge is configured after ATT;
+  Mobile Ads itself starts only when UMP permits ads.
+
+### Upgrading from 0.6
+- Use matching 0.7 Rust and Swift versions. The Swift `Ads` product includes `Att`.
+- Add `NSUserTrackingUsageDescription` for any app using ads and remove local
+  automatic ATT loops. `AdTrackingPrompt::Manual` permits custom prompt timing
+  but still requires a resolved ATT decision before ad startup.
+- Omit `AdmobConfig` for captures without prompts or ads; wait for
+  `AdmobState::can_request_ads` before sending ad commands.
+
+## 0.6.0
 
 ### Added
 - Expose `AdmobState::banner_height` as the mounted banner's height in UIKit

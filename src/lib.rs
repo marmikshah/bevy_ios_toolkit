@@ -19,10 +19,10 @@
 //!
 //! ```toml
 //! [dependencies]
-//! bevy_ios_toolkit = { version = "0.6", features = ["ads", "att"] }
+//! bevy_ios_toolkit = { version = "0.7", features = ["ads"] }
 //!
 //! [target.'cfg(target_os = "ios")'.dependencies]
-//! bevy_ios_toolkit = { version = "0.6", features = ["storekit"] }
+//! bevy_ios_toolkit = { version = "0.7", features = ["storekit"] }
 //! ```
 //!
 //! # The native contract
@@ -109,10 +109,10 @@ pub mod prelude {
     #[cfg(feature = "ads")]
     pub use crate::ads::{
         AdClicked, AdDismissed, AdFormat, AdInventory, AdLoadFailed, AdLoadState, AdLoaded,
-        AdShowFailed, AdShown, AdmobConfig, AdmobState, BannerPosition, ConsentInfoUpdateFailed,
-        ConsentStatus, ConsentUpdated, HideBanner, LoadAd, PresentPrivacyOptions,
-        PrivacyOptionsRequirement, RequestConsent, RewardEarned, ShowAd, ShowBanner, TEST_APP_ID,
-        UmpDebugGeography, UmpTestConfig,
+        AdShowFailed, AdShown, AdTrackingPrompt, AdmobConfig, AdmobState, BannerPosition,
+        ConsentInfoUpdateFailed, ConsentStatus, ConsentUpdated, HideBanner, LoadAd,
+        PresentPrivacyOptions, PrivacyOptionsRequirement, RequestConsent, RewardEarned, ShowAd,
+        ShowBanner, TEST_APP_ID, UmpDebugGeography, UmpTestConfig,
     };
 
     #[cfg(feature = "platform")]
@@ -146,10 +146,12 @@ impl Plugin for IosPlugin {
     fn build(&self, app: &mut App) {
         #[cfg(all(feature = "storekit", any(target_os = "ios", doc)))]
         app.add_plugins(store::StorePlugin);
+        #[cfg(feature = "att")]
+        if !app.is_plugin_added::<att::AttPlugin>() {
+            app.add_plugins(att::AttPlugin);
+        }
         #[cfg(feature = "ads")]
         app.add_plugins(ads::AdsPlugin);
-        #[cfg(feature = "att")]
-        app.add_plugins(att::AttPlugin);
         #[cfg(feature = "gamekit")]
         app.add_plugins(gamekit::GameKitPlugin);
         #[cfg(feature = "platform")]
