@@ -18,6 +18,8 @@ struct Fake {
     initializations: u32,
     use_test_ads: bool,
     consent: i32,
+    consent_presentations: u32,
+    consent_pending: bool,
     can_request_ads: bool,
     fail_consent_updates: bool,
     privacy_options: i32,
@@ -42,6 +44,26 @@ impl Fake {
 
     fn push(&mut self, ev: AdEvent) {
         self.events.push_back(ev);
+    }
+
+    fn resolve_consent(&mut self) {
+        if matches!(self.consent, 2 | 3) || self.consent_pending {
+            return;
+        }
+        self.consent_presentations += 1;
+        self.consent_pending =
+            std::env::var("BEVY_ADMOB_FAKE_CONSENT_PENDING").as_deref() == Ok("1");
+        if !self.consent_pending {
+            self.complete_consent();
+        }
+    }
+
+    fn complete_consent(&mut self) {
+        self.consent_pending = false;
+        self.consent = 3;
+        self.can_request_ads = std::env::var("BEVY_ADMOB_FAKE_CAN_REQUEST_ADS")
+            .map(|value| matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+            .unwrap_or(true);
     }
 }
 
@@ -97,6 +119,9 @@ pub unsafe fn admob_init_with_ump_test(
     f.fail_consent_updates = update_failure == "failed";
     if matches!(update_failure.as_str(), "failed" | "fail_once") {
         f.push(consent_update_failure());
+    } else if f.consent == 1 {
+        // The native bridge verifies and presents a required form at startup.
+        f.resolve_consent();
     }
     f.privacy_options = if std::env::var("BEVY_ADMOB_FAKE_PRIVACY_OPTIONS")
         .map(|v| v.eq_ignore_ascii_case("required"))
@@ -165,10 +190,12 @@ pub unsafe fn admob_banner_show(_unit_id: *const c_char, _position: i32) {
         f.push(event(AdFormat::Banner.as_i32(), "show_failed"));
         return;
     }
-    f.banner_height = 50.0;
+    f.banner_height = 0.0;
     if Fake::env_formats("BEVY_ADMOB_FAKE_NO_FILL").contains(&AdFormat::Banner.as_i32()) {
         f.push(event(AdFormat::Banner.as_i32(), "load_failed"));
     } else {
+        f.banner_height = 50.0;
+        f.push(event(AdFormat::Banner.as_i32(), "loaded"));
         f.push(event(AdFormat::Banner.as_i32(), "shown"));
     }
 }
@@ -189,9 +216,7 @@ pub unsafe fn admob_request_consent() {
         f.push(consent_update_failure());
         return;
     }
-    // Presenting the form resolves any outstanding requirement.
-    f.consent = 3;
-    f.can_request_ads = true;
+    f.resolve_consent();
 }
 
 pub unsafe fn admob_present_privacy_options() {
@@ -249,4 +274,14 @@ pub fn ump_test_config() -> (i32, bool) {
 #[cfg(test)]
 pub fn initializations() -> u32 {
     lock().initializations
+}
+
+#[cfg(test)]
+pub fn consent_presentations() -> u32 {
+    lock().consent_presentations
+}
+
+#[cfg(test)]
+pub fn complete_consent() {
+    lock().complete_consent();
 }

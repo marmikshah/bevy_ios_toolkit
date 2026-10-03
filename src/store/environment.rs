@@ -28,9 +28,9 @@ pub(crate) fn take_environment_request(
 ///
 /// TestFlight uses [`Sandbox`](Self::Sandbox). Xcode without a StoreKit
 /// configuration can also report sandbox, so this is deliberately not an
-/// install-source detector. Wait for a terminal value, then select production
-/// service configuration only when [`is_production`](Self::is_production)
-/// returns `true`.
+/// install-source detector. This resource describes purchases only. Select
+/// application services through [`AppEnvironment`](crate::environment::AppEnvironment),
+/// which keeps release device builds, including TestFlight, in production.
 /// [`StorePlugin`](crate::store::StorePlugin) inserts this resource only on iOS.
 ///
 /// <https://developer.apple.com/documentation/storekit/apptransaction/environment>
@@ -58,10 +58,8 @@ impl AppStoreEnvironment {
         !matches!(self, Self::Pending)
     }
 
-    /// Whether production-only service configuration is safe to use.
-    ///
-    /// Pending, test, unavailable, and unknown environments all return `false`
-    /// so callers fail closed to their test configuration.
+    /// Whether StoreKit reported the production App Store purchase environment.
+    /// This does not select the application's development or production services.
     pub const fn is_production(self) -> bool {
         matches!(self, Self::Production)
     }
@@ -143,7 +141,7 @@ mod tests {
     }
 
     #[test]
-    fn only_production_enables_production_configuration() {
+    fn only_production_receipts_are_classified_as_production() {
         assert!(AppStoreEnvironment::Production.is_production());
 
         for environment in [

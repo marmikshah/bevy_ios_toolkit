@@ -84,7 +84,8 @@ activity and terminal result, plus the other toolkit integrations:
   this can ask for an Apple Account. Ownership still reconciles at launch.
 - **Interstitial Ad** / **Rewarded Ad** — load *and* present from one tap.
 - **Toggle Banner** — show / hide the banner.
-- **Request Ad Consent** — UMP consent form.
+- **Request Ad Consent** — explicit retry of automatic startup verification;
+  saved approval and rejection skip the form unless UMP requires a fresh choice.
 - **Privacy Options** — reopens UMP choices when the SDK requires the entry point.
 - **Request Tracking (ATT)** — explicit request for manual timing. Ads request
   ATT automatically at launch by default. Set `BEVY_DEMO_MANUAL_ATT=1` to verify

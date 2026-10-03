@@ -28,12 +28,12 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/googleads/swift-package-manager-google-mobile-ads",
-            from: "12.3.0"
+            exact: "12.14.0"
         ),
-        // GMA 12.3 permits UMP 2 or 3, while this bridge uses UMP 3 APIs.
+        // Consumers inherit both exact SDK versions; do not override them.
         .package(
             url: "https://github.com/googleads/swift-package-manager-google-user-messaging-platform.git",
-            from: "3.0.0"
+            exact: "3.1.0"
         ),
     ],
     targets: [

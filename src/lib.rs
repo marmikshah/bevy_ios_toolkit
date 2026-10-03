@@ -53,6 +53,8 @@
 
 use bevy::prelude::*;
 
+pub mod environment;
+
 #[cfg(all(feature = "storekit", any(target_os = "ios", doc, test)))]
 #[path = "store/environment.rs"]
 mod store_environment;
@@ -97,6 +99,7 @@ pub mod notifications;
 
 pub mod prelude {
     pub use crate::IosPlugin;
+    pub use crate::environment::AppEnvironment;
 
     #[cfg(all(feature = "storekit", any(target_os = "ios", doc)))]
     pub use crate::store::{
@@ -109,10 +112,10 @@ pub mod prelude {
     #[cfg(feature = "ads")]
     pub use crate::ads::{
         AdClicked, AdDismissed, AdFormat, AdInventory, AdLoadFailed, AdLoadState, AdLoaded,
-        AdShowFailed, AdShown, AdTrackingPrompt, AdmobConfig, AdmobState, BannerPosition,
-        ConsentInfoUpdateFailed, ConsentStatus, ConsentUpdated, HideBanner, LoadAd,
-        PresentPrivacyOptions, PrivacyOptionsRequirement, RequestConsent, RewardEarned, ShowAd,
-        ShowBanner, TEST_APP_ID, UmpDebugGeography, UmpTestConfig,
+        AdShowFailed, AdShown, AdTrackingPrompt, AdmobConfig, AdmobState, BannerIntent,
+        BannerPlugin, BannerPosition, ConsentInfoUpdateFailed, ConsentStatus, ConsentUpdated,
+        HideBanner, LoadAd, PresentPrivacyOptions, PrivacyOptionsRequirement, RequestConsent,
+        RewardEarned, ShowAd, ShowBanner, TEST_APP_ID, TryShowAd, UmpDebugGeography, UmpTestConfig,
     };
 
     #[cfg(feature = "platform")]
