@@ -13,7 +13,7 @@ ECS resources and messages. One crate, one plugin, a **feature per integration**
 | `platform` | `platform` | haptics, safe-area insets, outbound links, share sheet, thermal/low-power state |
 | `notifications` | `notifications` | local user notifications (no APNs) |
 
-> **Status: experimental (0.7, pre-v1).** APIs will move. Live behaviour
+> **Status: experimental (0.8, pre-v1).** APIs will move. Live behaviour
 > needs a real device, the relevant Apple/Google setup, and the matching Swift
 > shim linked from the companion SPM package — see "iOS integration".
 
@@ -42,10 +42,10 @@ of misbehaving at runtime.
 
 ```toml
 [dependencies]
-bevy_ios_toolkit = { version = "0.7", features = ["ads"] }
+bevy_ios_toolkit = { version = "0.8", features = ["ads"] }
 
 [target.'cfg(target_os = "ios")'.dependencies]
-bevy_ios_toolkit = { version = "0.7", features = ["storekit"] }
+bevy_ios_toolkit = { version = "0.8", features = ["storekit"] }
 ```
 
 ## Quick start
@@ -221,7 +221,7 @@ natural break. Missing inventory is skipped immediately and never queued for
 later presentation. Keep game-specific placement and frequency caps in the game.
 An ATT-only app still requests permission explicitly. With ads enabled, games
 need no Swift prompt loop and no separate `Att` product linkage. Keep the Rust
-and Swift dependencies at matching 0.7 versions when migrating from 0.6.
+and Swift dependencies at matching 0.8 versions when migrating from 0.6 or 0.7.
 
 ### Notifications are local, and for a real event
 
@@ -279,7 +279,7 @@ validated in Xcode with the SDKs linked.
 
 | `bevy_ios_toolkit` | `bevy` | iOS | AdMob SDK |
 |--------------------|--------|-----|-----------|
-| 0.7                | 0.19   | 26.0+ | 12.14.0 (+ UMP 3.1.0), exact package pins |
+| 0.8                | 0.19   | 26.0+ | 12.14.0 (+ UMP 3.1.0), exact package pins |
 
 ## Before you rely on it
 
