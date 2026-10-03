@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Exercise the native ATT coordinator without permission state or SDK networks.
+# Exercise native ATT/UMP coordination without permission state or SDK networks.
 set -euo pipefail
 if [[ "${1:-}" == --help ]]; then
     echo "Usage: tests/att/run.sh"
@@ -10,5 +10,6 @@ cd "$(dirname "$0")/../.."
 mkdir -p target/att-tests
 swiftc -swift-version 6 -parse-as-library \
     Sources/Att/TrackingRequestCoordinator.swift tests/att/TrackingRequestTests.swift \
+    Sources/Ads/ConsentRequestCoordinator.swift tests/att/ConsentRequestTests.swift \
     -o target/att-tests/TrackingRequestTests
 target/att-tests/TrackingRequestTests

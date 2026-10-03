@@ -75,6 +75,41 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     @MainActor private var bannerDelegate: BannerObserver?
     @MainActor private var consentDebugGeography: Int32 = 0
     @MainActor private var consentTestDevices: [String] = []
+    #if canImport(UserMessagingPlatform)
+    @MainActor private lazy var consentRequest = ConsentRequestCoordinator(
+        refresh: {
+            do {
+                try await ConsentInformation.shared
+                    .requestConsentInfoUpdate(with: self.consentRequestParameters())
+                self.cacheConsentStatus()
+            } catch {
+                self.cacheConsentStatus()
+                self.emitConsentUpdateFailure(error)
+                NSLog("[admob] consent info update failed: %@", String(describing: error))
+                throw error
+            }
+        },
+        requiresConsent: { ConsentInformation.shared.consentStatus == .required },
+        canRequestAds: { ConsentInformation.shared.canRequestAds },
+        canPresent: {
+            guard UIApplication.shared.applicationState == .active,
+                  let vc = self.rootViewController() else { return false }
+            return vc.viewIfLoaded?.window != nil
+                && vc.presentedViewController == nil
+                && !vc.isBeingPresented && !vc.isBeingDismissed
+        },
+        prompt: {
+            do {
+                try await ConsentForm.loadAndPresentIfRequired(from: self.rootViewController())
+                self.cacheConsentStatus()
+            } catch {
+                self.cacheConsentStatus()
+                NSLog("[admob] consent form failed: %@", String(describing: error))
+                throw error
+            }
+        }
+    )
+    #endif
 
     // MARK: Event queue (thread-safe)
 
@@ -146,7 +181,7 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
             ConsentInformation.shared.reset()
         }
         #endif
-        refreshConsentInfo(present: false)
+        requestConsent()
     }
 
     @MainActor
@@ -159,7 +194,16 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     // MARK: Consent (UMP)
 
     @MainActor
-    func requestConsent() { refreshConsentInfo(present: true) }
+    func requestConsent() {
+        #if canImport(UserMessagingPlatform)
+        Task { @MainActor in await self.consentRequest.resolve() }
+        #else
+        setConsentStatus(3) // no UMP: treat as obtained
+        shared_.withLock { $0.canRequestAds = true }
+        setPrivacyOptionsRequirement(2)
+        startSDKIfPermitted()
+        #endif
+    }
 
     @MainActor
     func presentPrivacyOptions() {
@@ -175,38 +219,6 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
             }
             self.cacheConsentStatus()
         }
-        #endif
-    }
-
-    @MainActor
-    private func refreshConsentInfo(present: Bool) {
-        #if canImport(UserMessagingPlatform)
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                try await ConsentInformation.shared
-                    .requestConsentInfoUpdate(with: self.consentRequestParameters())
-            } catch {
-                NSLog("[admob] consent info update failed: %@", String(describing: error))
-                self.cacheConsentStatus()
-                self.emitConsentUpdateFailure(error)
-                return
-            }
-            self.cacheConsentStatus()
-            if present, let vc = self.rootViewController() {
-                do {
-                    try await ConsentForm.loadAndPresentIfRequired(from: vc)
-                } catch {
-                    NSLog("[admob] consent form failed: %@", String(describing: error))
-                }
-                self.cacheConsentStatus()
-            }
-        }
-        #else
-        setConsentStatus(3) // no UMP: treat as obtained
-        shared_.withLock { $0.canRequestAds = true }
-        setPrivacyOptionsRequirement(2)
-        startSDKIfPermitted()
         #endif
     }
 
@@ -367,7 +379,7 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
             emit(.banner, "show_failed", error: "no root view")
             return
         }
-        banner?.removeFromSuperview()
+        hideBanner()
         host.layoutIfNeeded()
         let width = host.safeAreaLayoutGuide.layoutFrame.width
         guard width > 0 else {
@@ -381,6 +393,8 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
         view.delegate = observer
         bannerDelegate = observer
         view.translatesAutoresizingMaskIntoConstraints = false
+        // A loading or unfilled banner never covers gameplay or reserves space.
+        view.isHidden = true
         host.addSubview(view)
 
         let guide = host.safeAreaLayoutGuide
@@ -394,6 +408,7 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
 
         banner = view
         host.layoutIfNeeded()
+        _ = refreshBannerHeight()
         view.load(Request())
     }
 
@@ -402,6 +417,25 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
         banner?.removeFromSuperview()
         banner = nil
         bannerDelegate = nil
+        _ = refreshBannerHeight()
+    }
+
+    @MainActor
+    func bannerReceived(_ view: BannerView) {
+        guard banner === view else { return }
+        view.isHidden = false
+        view.superview?.layoutIfNeeded()
+        _ = refreshBannerHeight()
+        emit(.banner, "loaded")
+        emit(.banner, "shown")
+    }
+
+    @MainActor
+    func bannerFailed(_ view: BannerView, error: Error) {
+        guard banner === view else { return }
+        view.isHidden = true
+        _ = refreshBannerHeight()
+        emit(.banner, "load_failed", error: String(describing: error))
     }
 
     // MARK: Helpers
@@ -458,11 +492,10 @@ private final class BannerObserver: NSObject, BannerViewDelegate {
     init(bridge: AdMobBridge) { self.bridge = bridge }
 
     func bannerViewDidReceiveAd(_ bannerView: BannerView) {
-        bridge.emit(.banner, "loaded")
-        bridge.emit(.banner, "shown")
+        bridge.bannerReceived(bannerView)
     }
     func bannerView(_ bannerView: BannerView, didFailToReceiveAdWithError error: Error) {
-        bridge.emit(.banner, "load_failed", error: String(describing: error))
+        bridge.bannerFailed(bannerView, error: error)
     }
 }
 

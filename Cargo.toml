@@ -23,7 +23,7 @@ serde_json = { version = "1", optional = true }
 # linking fails on undefined symbols. Opt in to exactly what you ship.
 default = []
 storekit = ["dep:serde", "dep:serde_json"]
-ads = ["dep:serde", "dep:serde_json", "att"]
+ads = ["dep:serde", "dep:serde_json", "att", "bevy/bevy_window"]
 platform = []
 att = []
 gamekit = []

@@ -4,10 +4,10 @@
 //! 1. Insert [`AdmobConfig`] with your per-format ad unit ids (or
 //!    [`AdmobConfig::test_ads`] to use Google's official sample units). The
 //!    plugin automatically requests ATT and waits for a resolved decision.
-//!    The native bridge then refreshes UMP; Mobile Ads starts only when UMP
+//!    The native bridge verifies UMP and presents any required form at startup,
+//!    respecting saved approval and rejection. Mobile Ads starts only when UMP
 //!    permits ads. `ads` includes the Rust `att` feature and Swift `Att` product.
-//! 2. Wait until [`AdmobState::can_request_ads`] is true, presenting
-//!    [`RequestConsent`] first when consent is required.
+//! 2. Wait until [`AdmobState::can_request_ads`] is true; gameplay never waits.
 //! 3. Send [`LoadAd`] to preload a full-screen format; read [`AdInventory`] —
 //!    `is_loaded(format)` — to know when it's ready to present.
 //! 4. Send [`ShowAd`] to present it, or [`ShowBanner`] / [`HideBanner`] for the
@@ -15,8 +15,9 @@
 //! 5. React to [`AdLoaded`] / [`AdLoadFailed`] / [`AdShown`] / [`AdDismissed`] /
 //!    [`AdShowFailed`] / [`RewardEarned`] / [`AdClicked`].
 //!
-//! Consent: read [`AdmobState::consent`]; send [`RequestConsent`] to present the
-//! initial UMP form when required. If the [`PrivacyOptionsRequirement`]
+//! Consent verification, required forms and bounded retries belong to the
+//! toolkit. Games need no launch/death consent trigger. [`RequestConsent`]
+//! remains available for an explicit retry. If the [`PrivacyOptionsRequirement`]
 //! resource is [`PrivacyOptionsRequirement::Required`], keep a visible action
 //! that sends [`PresentPrivacyOptions`] so the user can revisit their choices.
 //! Early consent requests survive the ATT wait. Early ad loads/presentations
@@ -33,8 +34,9 @@
 //! - `BEVY_ADMOB_FAKE_SHOW_FAIL=interstitial` — those formats fail to present.
 //! - `BEVY_ADMOB_FAKE_REWARD_AMOUNT=10` / `BEVY_ADMOB_FAKE_REWARD_TYPE=coins` —
 //!   reward granted by rewarded formats (default `1` / `Reward`).
-//! - `BEVY_ADMOB_FAKE_CONSENT=required` — consent starts `Required` instead of
-//!   `Obtained`; a [`RequestConsent`] then resolves it to `Obtained`.
+//! - `BEVY_ADMOB_FAKE_CONSENT=required` — startup collects a required decision;
+//!   `approved` and `rejected` both represent an already gathered decision.
+//! - `BEVY_ADMOB_FAKE_CONSENT_PENDING=1` — leave that startup form pending.
 //! - `BEVY_ADMOB_FAKE_CAN_REQUEST_ADS=true` — override authoritative UMP ad
 //!   readiness independently of its coarse consent status.
 //! - `BEVY_ADMOB_FAKE_CONSENT_UPDATE=failed|fail_once` — surface a persistent
@@ -50,6 +52,9 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::ffi::read_cstr;
+
+mod banner;
+pub use banner::{BannerIntent, BannerPlugin};
 
 #[cfg(target_os = "ios")]
 #[path = "backend_ios.rs"]
@@ -174,18 +179,18 @@ impl BannerPosition {
     }
 }
 
-/// UMP (User Messaging Platform) consent state for personalized ads.
+/// UMP (User Messaging Platform) consent collection state.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum ConsentStatus {
     /// Not yet determined (SDK still resolving, or pre-init).
     #[default]
     Unknown,
-    /// Consent is required and not yet obtained — present the form via
-    /// [`RequestConsent`] before requesting ads.
+    /// A decision is required; the toolkit presents the form automatically.
     Required,
     /// Consent is not required in the user's region.
     NotRequired,
-    /// Consent has been gathered (or is not required and already resolved).
+    /// A decision has been gathered, including rejection. Ad readiness still
+    /// comes exclusively from [`AdmobState::can_request_ads`].
     Obtained,
 }
 
@@ -289,6 +294,15 @@ pub struct AdmobConfig {
 }
 
 impl AdmobConfig {
+    /// Debug and simulator builds use test creatives. Release device builds,
+    /// including TestFlight, use the configured production placements.
+    pub fn for_build() -> Self {
+        Self {
+            use_test_ads: crate::environment::AppEnvironment::current().is_development(),
+            ..Default::default()
+        }
+    }
+
     /// A config that serves Google's official test ads for every format — the
     /// zero-setup default for development.
     pub fn test_ads() -> Self {
@@ -381,8 +395,8 @@ pub struct AdmobState {
     pub can_request_ads: bool,
     /// Whether a banner is currently on screen.
     pub banner_visible: bool,
-    /// Mounted banner height in UIKit points, including its reserved space
-    /// before an ad fills. Zero when hidden or detached. Excludes safe-area
+    /// Visible, filled banner height in UIKit points. Zero while loading,
+    /// on no-fill, or when hidden or detached. Excludes safe-area
     /// insets and caller padding; the desktop fake reserves 50 points. Native
     /// changes can take one main-loop turn to appear when polled by a worker.
     pub banner_height: f32,
@@ -401,8 +415,14 @@ pub struct LoadAd(pub AdFormat);
 #[derive(Message, Clone, Debug)]
 pub struct ShowAd(pub AdFormat);
 
+/// Try once at a natural break. An unavailable creative is skipped immediately;
+/// it is never queued to interrupt gameplay when a later load completes.
+#[derive(Message, Clone, Debug)]
+pub struct TryShowAd(pub AdFormat);
+
 /// Show (or move) the banner after [`AdmobState::can_request_ads`] is true.
-/// Loads and displays in one step.
+/// Loads asynchronously, remaining hidden with zero height until filled.
+/// Prefer [`BannerPlugin`] and [`BannerIntent`] for managed placements.
 #[derive(Message, Clone, Debug, Default)]
 pub struct ShowBanner {
     pub position: BannerPosition,
@@ -412,7 +432,8 @@ pub struct ShowBanner {
 #[derive(Message, Clone, Debug)]
 pub struct HideBanner;
 
-/// Present the UMP consent form if one is required/available.
+/// Retry UMP verification and present a required form, sharing any pending
+/// startup operation. The toolkit already does this automatically at launch.
 #[derive(Message, Clone, Debug)]
 pub struct RequestConsent;
 
@@ -471,8 +492,8 @@ pub struct ConsentUpdated(pub ConsentStatus);
 /// The latest UMP consent-info update failed.
 ///
 /// Read [`AdmobState::can_request_ads`] after this message: cached consent from
-/// a previous session may still permit ads. A consumer may also offer or
-/// schedule an explicit [`RequestConsent`] retry.
+/// a previous session may still permit ads. The toolkit retries failed startup
+/// verification up to three times; an explicit [`RequestConsent`] can retry later.
 #[derive(Message, Clone, Debug)]
 pub struct ConsentInfoUpdateFailed {
     pub error: String,
@@ -568,6 +589,7 @@ struct AdsPoll {
     tracking_requested: bool,
     consent_requested: bool,
     consent: ConsentStatus,
+    presenting: Option<AdFormat>,
 }
 
 pub struct AdsPlugin;
@@ -584,6 +606,7 @@ impl Plugin for AdsPlugin {
             .init_resource::<AdsPoll>()
             .add_message::<LoadAd>()
             .add_message::<ShowAd>()
+            .add_message::<TryShowAd>()
             .add_message::<ShowBanner>()
             .add_message::<HideBanner>()
             .add_message::<RequestConsent>()
@@ -642,6 +665,7 @@ fn pump_requests(
     mut inventory: ResMut<AdInventory>,
     mut loads: MessageReader<LoadAd>,
     mut shows: MessageReader<ShowAd>,
+    mut tries: MessageReader<TryShowAd>,
     mut banner_shows: MessageReader<ShowBanner>,
     mut banner_hides: MessageReader<HideBanner>,
     mut consents: MessageReader<RequestConsent>,
@@ -675,12 +699,21 @@ fn pump_requests(
                 });
                 continue;
             }
+            if inventory.is_loading(*format) || inventory.is_loaded(*format) {
+                continue;
+            }
             inventory.set(*format, AdLoadState::Loading);
             load(*format, &resolve(*format));
         }
     }
     for ShowAd(format) in shows.read() {
-        if ready {
+        if ready
+            && format.is_full_screen()
+            && inventory.is_loaded(*format)
+            && poll.presenting.is_none()
+        {
+            inventory.set(*format, AdLoadState::Idle);
+            poll.presenting = Some(*format);
             show(*format);
         } else {
             show_failed.write(AdShowFailed {
@@ -689,8 +722,20 @@ fn pump_requests(
             });
         }
     }
+    for TryShowAd(format) in tries.read() {
+        if ready
+            && format.is_full_screen()
+            && inventory.is_loaded(*format)
+            && poll.presenting.is_none()
+        {
+            inventory.set(*format, AdLoadState::Idle);
+            poll.presenting = Some(*format);
+            show(*format);
+        }
+    }
     for ShowBanner { position } in banner_shows.read() {
         if ready {
+            inventory.set(AdFormat::Banner, AdLoadState::Loading);
             banner_show(&resolve(AdFormat::Banner), *position);
         } else {
             show_failed.write(AdShowFailed {
@@ -701,6 +746,7 @@ fn pump_requests(
     }
     for _ in banner_hides.read() {
         if poll.inited {
+            inventory.set(AdFormat::Banner, AdLoadState::Idle);
             banner_hide();
         }
     }
@@ -777,9 +823,15 @@ fn poll_backend(
                 shown.write(AdShown(format));
             }
             "dismissed" => {
+                if poll.presenting == Some(format) {
+                    poll.presenting = None;
+                }
                 dismissed.write(AdDismissed(format));
             }
             "show_failed" => {
+                if poll.presenting == Some(format) {
+                    poll.presenting = None;
+                }
                 if format.is_full_screen() {
                     inventory.set(format, AdLoadState::Idle);
                 }
@@ -850,6 +902,7 @@ mod tests {
             "BEVY_ADMOB_FAKE_CONSENT",
             "BEVY_ADMOB_FAKE_CAN_REQUEST_ADS",
             "BEVY_ADMOB_FAKE_CONSENT_UPDATE",
+            "BEVY_ADMOB_FAKE_CONSENT_PENDING",
             "BEVY_ADMOB_FAKE_PRIVACY_OPTIONS",
         ] {
             unsafe { std::env::remove_var(key) };
@@ -1030,10 +1083,8 @@ mod tests {
         );
     }
 
-    /// Consent starts `Required`, then `RequestConsent` resolves it to
-    /// `Obtained` and emits a `ConsentUpdated`.
     #[test]
-    fn consent_required_then_obtained() {
+    fn required_consent_is_collected_at_startup_without_game_requests() {
         let _guard = guarded();
         unsafe { std::env::set_var("BEVY_ADMOB_FAKE_CONSENT", "required") }
 
@@ -1043,8 +1094,9 @@ mod tests {
         app.update(); // init + first consent poll
         assert_eq!(
             app.world().resource::<AdmobState>().consent,
-            ConsentStatus::Required
+            ConsentStatus::Obtained
         );
+        assert_eq!(backend::consent_presentations(), 1);
 
         app.world_mut()
             .resource_mut::<Messages<RequestConsent>>()
@@ -1057,6 +1109,31 @@ mod tests {
             ConsentStatus::Obtained
         );
         assert!(app.world().resource::<AdmobState>().can_request_ads);
+        assert_eq!(backend::consent_presentations(), 1);
+    }
+
+    #[test]
+    fn saved_approval_and_rejection_never_present_another_startup_form() {
+        let _guard = guarded();
+        for choice in ["approved", "rejected"] {
+            backend::reset();
+            unsafe {
+                std::env::set_var("BEVY_ADMOB_FAKE_CONSENT", choice);
+                std::env::set_var("BEVY_ADMOB_FAKE_CAN_REQUEST_ADS", "false");
+            }
+            let mut app = build_app();
+            app.insert_resource(AdmobConfig::test_ads());
+            app.update();
+            app.world_mut().write_message(RequestConsent);
+            app.update();
+            let state = app.world().resource::<AdmobState>();
+            assert_eq!(state.consent, ConsentStatus::Obtained);
+            assert!(
+                !state.can_request_ads,
+                "an answered form does not infer ad readiness"
+            );
+            assert_eq!(backend::consent_presentations(), 0);
+        }
     }
 
     #[test]
@@ -1201,7 +1278,7 @@ mod tests {
     }
 
     #[test]
-    fn banner_reserves_space_on_no_fill_but_not_on_failed_mount() {
+    fn banner_reserves_no_space_on_no_fill_or_failed_mount() {
         let _guard = guarded();
         let mut app = build_app();
         app.insert_resource(AdmobConfig::test_ads());
@@ -1218,10 +1295,38 @@ mod tests {
         }
         app.world_mut().write_message(ShowBanner::default());
         app.update();
-        assert_eq!(app.world().resource::<AdmobState>().banner_height, 50.0);
+        assert_eq!(app.world().resource::<AdmobState>().banner_height, 0.0);
+        assert!(!app.world().resource::<AdmobState>().banner_visible);
         app.world_mut().write_message(HideBanner);
         app.update();
         assert_eq!(app.world().resource::<AdmobState>().banner_height, 0.0);
+    }
+    #[test]
+    fn unavailable_try_show_is_dropped_and_never_shows_after_a_later_load() {
+        let _guard = guarded();
+        let mut app = build_app();
+        app.insert_resource(AdmobConfig::test_ads());
+        app.update();
+        app.world_mut()
+            .write_message(TryShowAd(AdFormat::Interstitial));
+        app.update();
+        assert!(app.world().resource::<Messages<AdShowFailed>>().is_empty());
+        app.world_mut()
+            .write_message(LoadAd(AdFormat::Interstitial));
+        app.update();
+        app.update();
+        assert!(
+            app.world()
+                .resource::<AdInventory>()
+                .is_loaded(AdFormat::Interstitial)
+        );
+        assert!(app.world().resource::<Messages<AdShown>>().is_empty());
+        app.world_mut()
+            .write_message(TryShowAd(AdFormat::Interstitial));
+        app.world_mut()
+            .write_message(TryShowAd(AdFormat::Interstitial));
+        app.update();
+        assert_eq!(app.world().resource::<Messages<AdShown>>().len(), 1);
     }
     #[test]
     fn default_config_starts_ads_without_game_owned_tracking_systems() {
@@ -1336,7 +1441,10 @@ mod tests {
     #[test]
     fn ump_blocks_banner_and_fullscreen_requests_after_att_is_resolved() {
         let _guard = guarded();
-        unsafe { std::env::set_var("BEVY_ADMOB_FAKE_CONSENT", "required") };
+        unsafe {
+            std::env::set_var("BEVY_ADMOB_FAKE_CONSENT", "required");
+            std::env::set_var("BEVY_ADMOB_FAKE_CONSENT_PENDING", "1");
+        }
         let mut app = build_app();
         app.insert_resource(AdmobConfig::test_ads());
         app.update();
@@ -1350,6 +1458,14 @@ mod tests {
         assert_eq!(app.world().resource::<Messages<AdShowFailed>>().len(), 2);
         assert!(!app.world().resource::<AdmobState>().banner_visible);
         app.world_mut().write_message(RequestConsent);
+        app.update();
+        assert_eq!(
+            backend::consent_presentations(),
+            1,
+            "pending forms coalesce"
+        );
+        assert!(!app.world().resource::<AdmobState>().can_request_ads);
+        backend::complete_consent();
         app.update();
         app.world_mut()
             .write_message(LoadAd(AdFormat::Interstitial));

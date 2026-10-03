@@ -67,29 +67,10 @@ fn main() {
     app.run();
 }
 
-// Ask once, then schedule a real event. `notifications`
-fn remind(
-    permission: Res<NotificationPermission>,
-    mut ask: MessageWriter<RequestNotificationPermission>,
-    mut notify: MessageWriter<ScheduleNotification>,
-) {
-    if !permission.is_determined() {
-        ask.write(RequestNotificationPermission);
-    } else if permission.can_deliver() {
-        // The same id replaces rather than stacks, so this is idempotent.
-        notify.write(ScheduleNotification {
-            id: "restock".into(),
-            title: "THE VAN CAME".into(),
-            body: "Something new is in the machine.".into(),
-            after: std::time::Duration::from_secs(4 * 60 * 60),
-        });
-    }
-}
-
-// Show an interstitial once it's loaded.
-fn show(inv: Res<AdInventory>, mut shows: MessageWriter<ShowAd>) {
+// Call once at a natural break; missing inventory is skipped.
+fn show(inv: Res<AdInventory>, mut shows: MessageWriter<TryShowAd>) {
     if inv.is_loaded(AdFormat::Interstitial) {
-        shows.write(ShowAd(AdFormat::Interstitial));
+        shows.write(TryShowAd(AdFormat::Interstitial));
     }
 }
 
@@ -188,15 +169,17 @@ sign-in sheet. Reading `AppStoreEnvironment` leaves it `Pending` until requested
 The Swift bridge logs its terminal value once. The resource is not inserted on
 non-iOS targets; they do not need an App Store classification. Apple reports
 TestFlight as `Sandbox`, but sandbox is not a reliable distinction between
-TestFlight and every development install. Use the resource for runtime service
-or ad-unit selection, but keep build-time values such as
+TestFlight and every development install. Use `AppEnvironment::current()` for runtime services and
+`AdmobConfig::for_build()` for ad units: only debug or simulator builds use
+development settings; device releases, including TestFlight, use production.
+Keep build-time values such as
 `GADApplicationIdentifier` in the app target configuration.
 
 `StoreProducts::get(id).display_price` is StoreKit's localized
 `Product.displayPrice`; never replace it with a hard-coded production price.
 `Entitlements` begins in `Checking` and publishes `EntitlementsChanged` for its
-first verified snapshot even when the result is empty. Keep purchase, ads, and
-tracking closed until `EntitlementsState::Ready`; `Failed` retains the last
+first verified snapshot even when the result is empty. Keep purchases and ad
+placements closed until `EntitlementsState::Ready`; `Failed` retains the last
 verified ownership set but is not permission to infer that an absent id is
 unowned. Consumables do not appear in `Entitlements`. Do not persist or migrate
 ownership in a game save. The toolkit
@@ -209,18 +192,33 @@ Use it to disable duplicate actions and keep progress visible until
 the operation result: always read `Entitlements`, including during launch-time
 reconciliation when no user-facing success message should be inferred.
 
-### Ads request ATT automatically
+### Ads verify consent at startup
 
 Inserting `AdmobConfig` requests ATT at the first active window if undetermined.
 The native bridge coalesces requests and retries interruptions. Existing allow,
 deny or restricted decisions skip the prompt; all three permit UMP to proceed.
+UMP verifies its saved choice on every launch and asks only if required.
+Approval and rejection both count as answered; games need no consent trigger
+or retry loop. Failed verification gets three asynchronous retries at 15, 30
+and 60 seconds. Valid cached UMP permission survives a refresh failure.
 The Mobile Ads SDK starts only after ATT resolves and UMP permits ad requests.
 Early ad commands emit failures; retry after `AdmobState::can_request_ads` is true.
-`RequestConsent` can be sent early and survives the ATT wait.
+`RequestConsent` remains an explicit retry and joins any pending startup request.
+Link only the Swift `Ads` product; `Package.swift` owns the exact AdMob and UMP
+versions. Consumers must not redeclare or override those SDK dependencies.
 
 For a custom explanation before ATT, set `AdmobConfig::tracking_prompt` to
 `AdTrackingPrompt::Manual`, then send `RequestTracking`. Manual mode does not
 bypass either gate. To capture without prompts or ads, omit `AdmobConfig`.
+Add `BannerPlugin` and set `BannerIntent::visible` from screen and ownership
+eligibility. It coalesces asynchronous requests, cancels them for backgrounding
+or ineligible placements, adapts to width changes, and retries failures with
+30–120 second backoff. A banner has zero height until a creative arrives and
+after no-fill. Games reserve only `AdmobState::banner_height`.
+
+Preload full-screen formats with `LoadAd`, then send `TryShowAd` once at a
+natural break. Missing inventory is skipped immediately and never queued for
+later presentation. Keep game-specific placement and frequency caps in the game.
 An ATT-only app still requests permission explicitly. With ads enabled, games
 need no Swift prompt loop and no separate `Att` product linkage. Keep the Rust
 and Swift dependencies at matching 0.7 versions when migrating from 0.6.
@@ -281,7 +279,7 @@ validated in Xcode with the SDKs linked.
 
 | `bevy_ios_toolkit` | `bevy` | iOS | AdMob SDK |
 |--------------------|--------|-----|-----------|
-| 0.7                | 0.19   | 26.0+ | 12.3–12.x (+ UMP 3.x) |
+| 0.7                | 0.19   | 26.0+ | 12.14.0 (+ UMP 3.1.0), exact package pins |
 
 ## Before you rely on it
 
