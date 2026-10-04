@@ -393,6 +393,8 @@ pub struct AdmobState {
     /// preserve usable consent from a previous session when the current
     /// consent-info update fails.
     pub can_request_ads: bool,
+    /// The launch check/form finished or failed; gameplay never waits for it.
+    pub consent_check_complete: bool,
     /// Whether a banner is currently on screen.
     pub banner_visible: bool,
     /// Visible, filled banner height in UIKit points. Zero while loading,
@@ -596,6 +598,7 @@ pub struct AdsPlugin;
 
 impl Plugin for AdsPlugin {
     fn build(&self, app: &mut App) {
+        crate::configure_systems(app);
         if !app.is_plugin_added::<AttPlugin>() {
             app.add_plugins(AttPlugin);
         }
@@ -622,10 +625,12 @@ impl Plugin for AdsPlugin {
             .add_message::<ConsentInfoUpdateFailed>()
             .add_systems(
                 Update,
-                (init_once, pump_requests, poll_backend)
+                (init_once, poll_backend)
                     .chain()
-                    .after(AttSystems),
-            );
+                    .after(AttSystems)
+                    .in_set(crate::IosSystems::Poll),
+            )
+            .add_systems(Update, pump_requests.in_set(crate::IosSystems::Dispatch));
     }
 }
 
@@ -785,6 +790,10 @@ fn poll_backend(
         poll.consent = consent;
         state.consent = consent;
         consent_updated.write(ConsentUpdated(consent));
+    }
+    let complete = unsafe { backend::admob_consent_check_complete() != 0 };
+    if state.consent_check_complete != complete {
+        state.consent_check_complete = complete;
     }
     let ready = can_request_ads();
     if state.can_request_ads != ready {
@@ -1266,12 +1275,14 @@ mod tests {
             .resource_mut::<Messages<ShowBanner>>()
             .write(ShowBanner::default());
         app.update();
+        app.update(); // publish the asynchronous native result
         assert!(app.world().resource::<AdmobState>().banner_visible);
         assert_eq!(app.world().resource::<AdmobState>().banner_height, 50.0);
 
         app.world_mut()
             .resource_mut::<Messages<HideBanner>>()
             .write(HideBanner);
+        app.update();
         app.update();
         assert!(!app.world().resource::<AdmobState>().banner_visible);
         assert_eq!(app.world().resource::<AdmobState>().banner_height, 0.0);
@@ -1326,6 +1337,7 @@ mod tests {
         app.world_mut()
             .write_message(TryShowAd(AdFormat::Interstitial));
         app.update();
+        app.update(); // drain the native presentation callback
         assert_eq!(app.world().resource::<Messages<AdShown>>().len(), 1);
     }
     #[test]
@@ -1471,6 +1483,7 @@ mod tests {
             .write_message(LoadAd(AdFormat::Interstitial));
         app.world_mut().write_message(ShowBanner::default());
         app.update();
+        app.update(); // poll the loaded ad and mounted banner
         assert!(
             app.world()
                 .resource::<AdInventory>()
@@ -1486,4 +1499,9 @@ mod tests {
         app.add_plugins((MinimalPlugins, crate::IosPlugin));
         assert!(app.is_plugin_added::<AttPlugin>());
     }
+}
+
+#[cfg(all(test, not(target_os = "ios")))]
+pub(crate) fn reset_test_backend() {
+    backend::reset();
 }

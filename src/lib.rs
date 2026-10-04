@@ -19,10 +19,10 @@
 //!
 //! ```toml
 //! [dependencies]
-//! bevy_ios_toolkit = { version = "0.7", features = ["ads"] }
+//! bevy_ios_toolkit = { version = "0.8", features = ["game"] }
 //!
 //! [target.'cfg(target_os = "ios")'.dependencies]
-//! bevy_ios_toolkit = { version = "0.7", features = ["storekit"] }
+//! bevy_ios_toolkit = { version = "0.8", features = ["storekit"] }
 //! ```
 //!
 //! # The native contract
@@ -37,8 +37,8 @@
 //!   staticlib links on any target.
 //!
 //! Off iOS, integrations keep a fake only where a real cross-platform flow
-//! benefits from one. StoreKit purchases are platform-owned: [`store`] is iOS
-//! only and has no desktop backend.
+//! benefits from one. StoreKit purchases are platform-owned: [`store`] exposes
+//! portable policy types, and the native backend exists only on iOS.
 //!
 //! ```no_run
 //! use bevy::prelude::*;
@@ -55,17 +55,37 @@ use bevy::prelude::*;
 
 pub mod environment;
 
-#[cfg(all(feature = "storekit", any(target_os = "ios", doc, test)))]
+/// Order native polling, game policy, and command dispatch explicitly.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IosSystems {
+    Poll,
+    Intents,
+    Dispatch,
+}
+
+pub(crate) fn configure_systems(app: &mut App) {
+    app.configure_sets(
+        Update,
+        (IosSystems::Poll, IosSystems::Intents, IosSystems::Dispatch).chain(),
+    );
+}
+
+#[cfg(feature = "game")]
+pub mod game;
+
+#[cfg(feature = "storekit")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 #[path = "store/environment.rs"]
 mod store_environment;
 
-#[cfg(all(feature = "storekit", any(target_os = "ios", doc, test)))]
+#[cfg(feature = "storekit")]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 #[path = "store/operation.rs"]
 mod store_operation;
 
-#[cfg(all(feature = "storekit", any(target_os = "ios", doc, test)))]
+#[cfg(feature = "storekit")]
 #[path = "store/state.rs"]
-#[cfg_attr(test, allow(dead_code))]
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
 mod store_state;
 
 #[cfg(any(
@@ -76,7 +96,7 @@ mod store_state;
 ))]
 mod ffi;
 
-#[cfg(all(feature = "storekit", any(target_os = "ios", doc)))]
+#[cfg(feature = "storekit")]
 pub mod store;
 
 #[cfg(feature = "ads")]
@@ -98,10 +118,12 @@ pub mod review;
 pub mod notifications;
 
 pub mod prelude {
-    pub use crate::IosPlugin;
     pub use crate::environment::AppEnvironment;
+    #[cfg(feature = "game")]
+    pub use crate::game::{IosGameConfig, IosGamePlugin};
+    pub use crate::{IosPlugin, IosSystems};
 
-    #[cfg(all(feature = "storekit", any(target_os = "ios", doc)))]
+    #[cfg(feature = "storekit")]
     pub use crate::store::{
         AppStoreEnvironment, Entitlements, EntitlementsChanged, EntitlementsState, ProductInfo,
         ProductsState, ProductsUpdated, PurchaseCompleted, PurchaseOutcome, PurchaseRequest,
@@ -136,8 +158,8 @@ pub mod prelude {
     #[cfg(feature = "notifications")]
     pub use crate::notifications::{
         CancelAllNotifications, CancelNotification, NotificationOpened, NotificationPermission,
-        NotificationPermissionChanged, NotificationScheduleFailed, PendingNotifications,
-        RequestNotificationPermission, ScheduleNotification,
+        NotificationPermissionChanged, NotificationPermissionFailed, NotificationScheduleFailed,
+        PendingNotifications, RequestNotificationPermission, ScheduleNotification,
     };
 }
 
@@ -147,7 +169,8 @@ pub struct IosPlugin;
 
 impl Plugin for IosPlugin {
     fn build(&self, app: &mut App) {
-        #[cfg(all(feature = "storekit", any(target_os = "ios", doc)))]
+        configure_systems(app);
+        #[cfg(all(feature = "storekit", target_os = "ios"))]
         app.add_plugins(store::StorePlugin);
         #[cfg(feature = "att")]
         if !app.is_plugin_added::<att::AttPlugin>() {

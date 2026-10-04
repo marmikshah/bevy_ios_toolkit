@@ -79,7 +79,17 @@ unsafe fn text(ptr: *const c_char) -> String {
 pub unsafe fn notifications_install_delegate() {}
 
 pub unsafe fn notifications_request() {
-    lock().status = env_status();
+    let mut fake = lock();
+    if fake.status != 0 {
+        return;
+    }
+    if env_flag("BEVY_IOS_FAKE_NOTIFICATIONS_REQUEST_FAIL") {
+        fake.events.push_back(Event::PermissionFailed {
+            reason: "fake authorization failure".into(),
+        });
+    } else {
+        fake.status = env_status();
+    }
 }
 
 pub unsafe fn notifications_status() -> i32 {

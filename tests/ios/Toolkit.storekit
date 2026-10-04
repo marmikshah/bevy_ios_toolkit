@@ -1,0 +1,35 @@
+{
+  "identifier": "7A0C3F41",
+  "nonRenewingSubscriptions": [],
+  "products": [
+    {
+      "displayPrice": "0.99",
+      "familyShareable": false,
+      "internalID": "1",
+      "localizations": [
+        {
+          "description": "No banner, every colourway, and my thanks.",
+          "displayName": "Supporter Pack",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "iap.playground.removeads",
+      "referenceName": "Supporter Pack",
+      "type": "NonConsumable"
+    }
+  ],
+  "settings": {
+    "_applicationInternalID": "",
+    "_developerTeamID": "",
+    "_failTransactionsEnabled": false,
+    "_lastSynchronizedDate": 0,
+    "_locale": "en_US",
+    "_storefront": "USA",
+    "_storeKitErrors": []
+  },
+  "subscriptionGroups": [],
+  "version": {
+    "major": 4,
+    "minor": 0
+  }
+}

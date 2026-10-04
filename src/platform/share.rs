@@ -10,7 +10,7 @@
 //! ```no_run
 //! use bevy_ios_toolkit::platform::share;
 //!
-//! share::text("undelivered — day 214\n7 doors · 142m");
+//! share::text("Game — day 214\n7 doors · 142m");
 //! ```
 
 /// Present the share sheet with `text`. No-op if a sheet is already up, or if

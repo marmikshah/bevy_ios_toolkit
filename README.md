@@ -5,6 +5,7 @@ ECS resources and messages. One crate, one plugin, a **feature per integration**
 
 | feature | module | what it bridges |
 |---------|--------|-----------------|
+| `game` | `game` | default iOS game startup: StoreKit, AdMob, permissions, notifications |
 | `storekit` | `store` | StoreKit app environment + in-app purchases |
 | `ads` | `ads` | Google AdMob ads + automatic ATT + UMP consent |
 | `att` | `att` | App Tracking Transparency prompt |
@@ -30,8 +31,36 @@ Every module shares one native contract:
 
 Off iOS, integrations keep a stateful fake only when there is a meaningful
 cross-platform flow to exercise. StoreKit is different: purchases belong to the
-platform store, so the `store` module exists only on iOS and has no desktop
-backend.
+platform store. Store types are portable for game policy tests; the native
+StorePlugin exists only on iOS. There is no desktop purchase backend.
+
+## Default iOS game structure
+
+Enable `game` and compose `IosGamePlugin(IosGameConfig::new(product_ids, ads))`
+before running Bevy. Link the matching Swift package's Platform, Store, Ads and
+Notifications products. Games supply product IDs, ad placements, shop UI,
+benefits and reminder content; toolkit owns SDK state and permission timing.
+
+The profile loads the catalogue and verified entitlements quietly. At launch it
+resolves ATT, refreshes UMP consent, presents only a required form, then requests
+notification permission only after OS settings report an unanswered choice.
+Denied and approved choices are remembered by their providers. Native sheets
+share one asynchronous presentation owner. Pending SDK work never gates game
+input, simulation or rendering. Put policy systems in `IosSystems::Intents` when
+they need to read this frame's native snapshot before dispatch.
+
+Use `ReloadStoreRequest` for a quiet failed catalogue/entitlement retry and
+`RestoreRequest` for the player's explicit Restore action. Banners reserve space
+only after a creative mounts; `TryShowAd` skips unavailable full-screen ads.
+Debug and simulator builds use development services. Physical release builds,
+including TestFlight, use production regardless of StoreKit's sandbox receipt.
+The explicit `capture()` / `capture_store()` profiles are ignored on production
+devices.
+
+Keep deterministic rules in a headless engine crate, and rendering, controls and
+placement policy in the game crate. Keep platform-independent persistence in
+a local engine module, separate from the simulation and native services.
+Pin this library's Rust and Swift halves to the same Git revision.
 
 ## Features are opt-in for a reason
 
@@ -42,10 +71,7 @@ of misbehaving at runtime.
 
 ```toml
 [dependencies]
-bevy_ios_toolkit = { version = "0.8", features = ["ads"] }
-
-[target.'cfg(target_os = "ios")'.dependencies]
-bevy_ios_toolkit = { version = "0.8", features = ["storekit"] }
+bevy_ios_toolkit = { version = "0.8", features = ["game"] }
 ```
 
 ## Quick start
@@ -55,63 +81,26 @@ use bevy::prelude::*;
 use bevy_ios_toolkit::prelude::*;
 
 fn main() {
-    let mut app = App::new();
-    app.add_plugins((DefaultPlugins, IosPlugin))
-        .insert_resource(AdmobConfig::test_ads());         // `ads`
-
-    #[cfg(target_os = "ios")]
-    app.insert_resource(StoreConfig {                      // `storekit`
-        product_ids: vec!["com.example.app.removeads".into()],
-    });
-
-    app.run();
+    let ads = AdmobConfig::for_build()
+        .with_unit(AdFormat::Banner, "YOUR_BANNER_UNIT_ID")
+        .with_unit(AdFormat::Interstitial, "YOUR_INTERSTITIAL_UNIT_ID");
+    App::new()
+        .add_plugins((
+            DefaultPlugins,
+            IosGamePlugin(IosGameConfig::new(["com.example.app.removeads"], ads)),
+        ))
+        .run();
 }
 
-// Call once at a natural break; missing inventory is skipped.
-fn show(inv: Res<AdInventory>, mut shows: MessageWriter<TryShowAd>) {
-    if inv.is_loaded(AdFormat::Interstitial) {
-        shows.write(TryShowAd(AdFormat::Interstitial));
-    }
-}
-
-// UMP owns the authoritative readiness decision. Do not infer it from the
-// coarse consent status; cached consent may remain usable after an update error.
-fn ads_ready(admob: Res<AdmobState>) {
-    if admob.can_request_ads { /* ad requests are permitted */ }
-}
-
-// StoreKit first resolves Checking -> Ready or Failed. Keep purchases, ads,
-// and tracking closed until Ready; only then is an absent id confirmed unowned.
-#[cfg(target_os = "ios")]
-fn gate(entitlements: Res<Entitlements>) {
-    match entitlements.state() {
-        EntitlementsState::Checking | EntitlementsState::Failed => {
-            /* keep purchase, ads, and tracking closed */
-        }
-        EntitlementsState::Ready
-            if entitlements.owns("com.example.app.removeads") => { /* purchased */ }
-        EntitlementsState::Ready => { /* localized offer may be shown */ }
-    }
-}
-
-// Restore completes only after AppStore.sync() and entitlement refresh finish.
-#[cfg(target_os = "ios")]
-fn restore_result(mut completed: MessageReader<RestoreCompleted>) {
-    for completed in completed.read() {
-        match completed.outcome {
-            RestoreOutcome::Success => { /* read Entitlements for restored access */ }
-            RestoreOutcome::Failed => { /* offer an explicit retry */ }
-        }
-    }
-}
-
-// Keep this action visible only when UMP requires it. Send
-// `PresentPrivacyOptions` from the user's tap to reopen their choices.
-fn privacy_entry_point(requirement: Res<PrivacyOptionsRequirement>) {
-    let visible = *requirement == PrivacyOptionsRequirement::Required;
-    /* project `visible` into your UI */
+// Send once at a natural break after applying the game's ownership policy.
+fn show(mut shows: MessageWriter<TryShowAd>) {
+    shows.write(TryShowAd(AdFormat::Interstitial)); // unavailable inventory is skipped
 }
 ```
+
+Use real production ad unit IDs; toolkit selects Google's sample IDs for debug
+and simulator builds. Use `AdmobState::can_request_ads` for ad readiness and
+verified `Entitlements` for ownership. Neither is a gameplay readiness gate.
 
 See [`demo/`](demo/) for desktop fakes and the complete native iOS surface.
 
@@ -153,9 +142,8 @@ are no files to vendor or keep in sync by hand.
    - **gamekit** — enable the Game Center capability.
    - **storekit** — define products in App Store Connect (or a StoreKit config).
    - **notifications** — nothing. No `Info.plist` key, no entitlement, no
-     capability: these are local notifications, not push. To catch one that
-     *launched* the app, call `notifications_install_delegate()` from your app
-     delegate — see below.
+     capability: these are local notifications, not push. NotificationsPlugin
+     registers the native delegate during app construction, before the app loop.
 4. The `demo/ios/` XcodeGen project shows the whole wiring end to end — it
    consumes the package by relative path.
 
@@ -246,22 +234,12 @@ leave two notifications queued, which also makes rescheduling idempotent.
 `PendingNotifications` records what this app has asked for *since it launched*;
 it is not the system's queue, so when the two could disagree, believe the system.
 
-Opens are captured by a `UNUserNotificationCenterDelegate` installed on the
-first update. iOS delivers the response for a notification that *launched* the
-app very early — possibly before Bevy's first frame — and a response delivered
-with no delegate set is gone. If catching that matters, call the shim's
-installer from your own app delegate first; it is idempotent, and anything
-buffered beforehand is drained on the first update:
-
-```swift
-@_silgen_name("notifications_install_delegate")
-func notificationsInstallDelegate()
-
-func application(_: UIApplication, didFinishLaunchingWithOptions _: ...) -> Bool {
-    notificationsInstallDelegate()
-    return true
-}
-```
+Opens are captured by a `UNUserNotificationCenterDelegate` installed during
+plugin construction, before winit enters UIApplicationMain. Early responses are
+buffered and drained on the first update. App shells need no native bootstrap.
+The initial permission is `Checking`; OS settings resolve it to NotDetermined,
+Denied, Authorized or Provisional. Request failures produce a separate message
+and never fabricate a denial.
 
 A notification API makes the daily-nag pattern very easy to build. Send one
 because something the player asked to know about actually happened — never to
@@ -272,10 +250,11 @@ exists to let you test.
 
 ```bash
 bin/check.sh # formatting, strict linting, and tests; --help for scope
-tests/att/run.sh # native ATT coordinator: foreground waits, retries, coalescing
+tests/att/run.sh # native prompt ownership, ATT and UMP coordination
 cargo run --example ads   --features ads
 cargo check --target aarch64-apple-ios --features storekit
 tests/ios/run.sh BOOTED_SIMULATOR_UDID # UIKit checks; run on iOS 26.x and 27
+tests/ios/demo.sh BOOTED_SIMULATOR_UDID # rendered demo + StoreKitTest scenarios
 ```
 
 The applicable fakes are env-tunable (force no-fill, show-failures, consent

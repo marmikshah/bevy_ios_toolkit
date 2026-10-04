@@ -48,15 +48,6 @@ pub fn run() {
         ..default()
     }))
     .add_plugins(IosPlugin)
-    .insert_resource(AdmobConfig {
-        // Automatic by default; the ATT button exercises explicit timing.
-        tracking_prompt: if std::env::var("BEVY_DEMO_MANUAL_ATT").as_deref() == Ok("1") {
-            AdTrackingPrompt::Manual
-        } else {
-            AdTrackingPrompt::Automatic
-        },
-        ..AdmobConfig::test_ads()
-    })
     .init_resource::<PendingShow>()
     .add_systems(Startup, setup)
     .add_systems(
@@ -70,6 +61,22 @@ pub fn run() {
             update_status,
         ),
     );
+
+    // Local StoreKit tests exercise the real native adapter without requiring
+    // network ad fill. A production device ignores this fixture switch.
+    if !(AppEnvironment::current().is_development()
+        && std::env::var("BEVY_DEMO_STORE_TEST").as_deref() == Ok("1"))
+    {
+        app.insert_resource(AdmobConfig {
+            // Automatic by default; the ATT button exercises explicit timing.
+            tracking_prompt: if std::env::var("BEVY_DEMO_MANUAL_ATT").as_deref() == Ok("1") {
+                AdTrackingPrompt::Manual
+            } else {
+                AdTrackingPrompt::Automatic
+            },
+            ..AdmobConfig::test_ads()
+        });
+    }
 
     #[cfg(target_os = "ios")]
     app.insert_resource(StoreConfig {
@@ -97,6 +104,8 @@ enum Action {
     Purchase,
     #[cfg(target_os = "ios")]
     Restore,
+    #[cfg(target_os = "ios")]
+    ReloadStore,
     Interstitial,
     Rewarded,
     ToggleBanner,
@@ -117,6 +126,8 @@ const ROWS: &[(&str, Action)] = &[
     ("Buy: Remove Ads", Action::Purchase),
     #[cfg(target_os = "ios")]
     ("Restore Purchases", Action::Restore),
+    #[cfg(target_os = "ios")]
+    ("Retry Store", Action::ReloadStore),
     ("Interstitial Ad", Action::Interstitial),
     ("Rewarded Ad", Action::Rewarded),
     ("Toggle Banner", Action::ToggleBanner),
@@ -170,6 +181,8 @@ fn setup(mut commands: Commands) {
                 },
                 TextColor(Color::srgb(0.8, 0.9, 1.0)),
                 Node {
+                    width: Val::Percent(100.0),
+                    max_width: Val::Px(360.0),
                     margin: UiRect::bottom(Val::Px(12.0)),
                     ..default()
                 },
@@ -242,6 +255,7 @@ fn on_store_button_press(
     entitlements: Res<Entitlements>,
     mut purchase: MessageWriter<PurchaseRequest>,
     mut restore: MessageWriter<RestoreRequest>,
+    mut reload: MessageWriter<ReloadStoreRequest>,
     mut environment: MessageWriter<RequestAppStoreEnvironment>,
 ) {
     for (interaction, action) in buttons.iter() {
@@ -249,6 +263,9 @@ fn on_store_button_press(
             continue;
         }
         match action {
+            Action::ReloadStore => {
+                reload.write(ReloadStoreRequest);
+            }
             Action::StoreEnvironment => {
                 environment.write(RequestAppStoreEnvironment);
             }
@@ -275,7 +292,7 @@ fn record_store_results(
     mut restores: MessageReader<RestoreCompleted>,
 ) {
     for purchase in purchases.read() {
-        last.0 = format!("purchase {}: {:?}", purchase.product_id, purchase.outcome);
+        last.0 = format!("purchase: {:?}", purchase.outcome);
     }
     for restore in restores.read() {
         last.0 = format!("restore: {:?}", restore.outcome);
@@ -328,7 +345,7 @@ fn on_ads_button_press(
         }
         match action {
             #[cfg(target_os = "ios")]
-            Action::Purchase | Action::Restore => {}
+            Action::Purchase | Action::Restore | Action::ReloadStore => {}
             Action::Interstitial if admob.can_request_ads => queue_ad(
                 AdFormat::Interstitial,
                 &inventory,
@@ -507,7 +524,7 @@ fn update_status(
         .map_or("unavailable", |product| product.display_price.as_str());
     #[cfg(target_os = "ios")]
     let store = format!(
-        "store: {} | price: {} | entitlements: {:?} | owned: {} | activity: {:?} | result: {} | ",
+        "store: {} | price: {}\nentitlements: {:?} | owned: {}\nactivity: {:?}\nresult: {}\n",
         *environment,
         offer,
         entitlements.state(),
@@ -522,7 +539,7 @@ fn update_status(
     #[cfg(not(target_os = "ios"))]
     let store = "";
     text.0 = format!(
-        "{store}interstitial: {:?} | banner: {} ({:.0}pt) | consent: {:?} | ads-ready: {} | privacy: {:?} | att: {:?} | gc: {:?} | thermal: {:?}{}",
+        "{store}interstitial: {:?} | banner: {} ({:.0}pt)\nconsent: {:?} | ads-ready: {}\nprivacy: {:?} | att: {:?}\ngc: {:?} | thermal: {:?}{}",
         inventory.state(AdFormat::Interstitial),
         admob.banner_visible,
         admob.banner_height,

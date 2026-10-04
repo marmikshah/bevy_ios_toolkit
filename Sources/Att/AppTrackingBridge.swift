@@ -10,20 +10,17 @@ import Foundation
 #if canImport(AppTrackingTransparency) && canImport(UIKit)
 import AppTrackingTransparency
 import UIKit
+import Platform
 
 @MainActor
 private let trackingRequest = TrackingRequestCoordinator(
     isDetermined: { ATTrackingManager.trackingAuthorizationStatus != .notDetermined },
-    canPresent: {
-        UIApplication.shared.applicationState == .active
-            && UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .filter { $0.activationState == .foregroundActive }
-                .flatMap { $0.windows }
-                .contains { $0.isKeyWindow && $0.rootViewController != nil
-                    && $0.rootViewController?.presentedViewController == nil }
-    },
-    prompt: { _ = await ATTrackingManager.requestTrackingAuthorization() }
+    canPresent: { canPresentNativeSheet() && NativePromptCoordinator.shared.isIdle },
+    prompt: {
+        guard let lease = NativePromptCoordinator.shared.tryBegin(.tracking) else { return }
+        defer { NativePromptCoordinator.shared.end(lease) }
+        _ = await ATTrackingManager.requestTrackingAuthorization()
+    }
 )
 
 @_cdecl("att_request")

@@ -43,12 +43,14 @@ let package = Package(
         ),
         .target(
             name: "Store",
+            dependencies: ["Platform"],
             linkerSettings: [.linkedFramework("StoreKit"), .linkedFramework("UIKit")]
         ),
         .target(
             name: "Ads",
             dependencies: [
                 "Att",
+                "Platform",
                 .product(
                     name: "GoogleMobileAds",
                     package: "swift-package-manager-google-mobile-ads"
@@ -62,6 +64,7 @@ let package = Package(
         ),
         .target(
             name: "Att",
+            dependencies: ["Platform"],
             linkerSettings: [
                 .linkedFramework("UIKit"),
                 .linkedFramework("AppTrackingTransparency"),
@@ -78,6 +81,7 @@ let package = Package(
         ),
         .target(
             name: "Notifications",
+            dependencies: ["Platform"],
             linkerSettings: [.linkedFramework("UserNotifications")]
         ),
     ]

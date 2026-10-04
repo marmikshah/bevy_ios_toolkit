@@ -124,13 +124,17 @@ pub struct AttPlugin;
 
 impl Plugin for AttPlugin {
     fn build(&self, app: &mut App) {
+        crate::configure_systems(app);
         app.init_resource::<TrackingStatus>()
             .add_message::<RequestTracking>()
             .add_message::<TrackingStatusChanged>()
             .add_systems(
                 Update,
-                (poll_status, pump_requests).chain().in_set(AttSystems),
-            );
+                poll_status
+                    .in_set(AttSystems)
+                    .in_set(crate::IosSystems::Poll),
+            )
+            .add_systems(Update, pump_requests.in_set(crate::IosSystems::Dispatch));
     }
 }
 

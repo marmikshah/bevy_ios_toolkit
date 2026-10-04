@@ -76,6 +76,7 @@ targets:
           - metal
     settings:
       base:
+        TARGETED_DEVICE_FAMILY: "1,2"
         PRODUCT_BUNDLE_IDENTIFIER: com.marmikshah.playground
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: 1
@@ -122,3 +123,30 @@ targets:
       - script: bash "$PROJECT_DIR/build_rust.sh"
         name: Build Rust static library
         basedOnDependencyAnalysis: false
+
+  ToolkitUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.marmikshah.playground.uitests
+        TEST_TARGET_NAME: IosToolkitDemo
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+    sources:
+      - path: ../../tests/ios/DemoSmoke.swift
+      - path: ../../tests/ios/StoreKitTests.swift
+      - path: ../../tests/ios/Toolkit.storekit
+    dependencies:
+      - target: IosToolkitDemo
+
+schemes:
+  IosToolkitDemo:
+    build:
+      targets:
+        IosToolkitDemo: all
+        ToolkitUITests: [test]
+    test:
+      config: Debug
+      targets:
+        - ToolkitUITests

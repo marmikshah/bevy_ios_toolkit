@@ -8,7 +8,7 @@ use super::*;
 /// (and clears env knobs) to a clean slate.
 static FAKE_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-fn guarded() -> std::sync::MutexGuard<'static, ()> {
+pub(crate) fn guarded() -> std::sync::MutexGuard<'static, ()> {
     let guard = FAKE_GUARD
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -17,6 +17,7 @@ fn guarded() -> std::sync::MutexGuard<'static, ()> {
         "BEVY_IOS_FAKE_NOTIFICATIONS",
         "BEVY_IOS_FAKE_NOTIFICATION_OPENED",
         "BEVY_IOS_FAKE_NOTIFICATIONS_REFUSE",
+        "BEVY_IOS_FAKE_NOTIFICATIONS_REQUEST_FAIL",
     ] {
         // SAFETY: every test touching these holds the guard above.
         unsafe { std::env::remove_var(key) };
@@ -76,8 +77,13 @@ fn permission_starts_unasked_and_a_request_resolves_it() {
         NotificationPermission::Authorized
     );
     let changes = drain::<NotificationPermissionChanged>(&mut app);
-    assert_eq!(changes.len(), 1, "one change, not one a frame");
-    assert_eq!(changes[0].0, NotificationPermission::Authorized);
+    assert_eq!(
+        changes.len(),
+        2,
+        "initial settings and one authorization change"
+    );
+    assert_eq!(changes[0].0, NotificationPermission::NotDetermined);
+    assert_eq!(changes[1].0, NotificationPermission::Authorized);
 }
 
 #[test]
@@ -298,5 +304,44 @@ fn the_wire_format_is_the_one_the_shim_writes() {
         serde_json::from_str::<Vec<Event>>("not json")
             .unwrap_or_default()
             .is_empty()
+    );
+}
+
+#[test]
+fn checking_is_not_an_unanswered_decision_and_failure_is_not_denial() {
+    let _guard = guarded();
+    let mut app = build_app();
+    assert_eq!(
+        *app.world().resource::<NotificationPermission>(),
+        NotificationPermission::Checking
+    );
+    unsafe { std::env::set_var("BEVY_IOS_FAKE_NOTIFICATIONS_REQUEST_FAIL", "1") };
+    granted(&mut app);
+    assert_eq!(
+        *app.world().resource::<NotificationPermission>(),
+        NotificationPermission::NotDetermined
+    );
+    let failures = drain::<NotificationPermissionFailed>(&mut app);
+    assert_eq!(failures.len(), 1);
+    assert!(!failures[0].reason.is_empty());
+    unsafe { std::env::remove_var("BEVY_IOS_FAKE_NOTIFICATIONS_REQUEST_FAIL") };
+    granted(&mut app);
+    assert_eq!(
+        *app.world().resource::<NotificationPermission>(),
+        NotificationPermission::Authorized
+    );
+}
+
+#[test]
+fn an_existing_permission_answer_survives_another_request() {
+    let _guard = guarded();
+    unsafe { std::env::set_var("BEVY_IOS_FAKE_NOTIFICATIONS", "denied") };
+    let mut app = build_app();
+    granted(&mut app);
+    unsafe { std::env::set_var("BEVY_IOS_FAKE_NOTIFICATIONS", "authorized") };
+    granted(&mut app);
+    assert_eq!(
+        *app.world().resource::<NotificationPermission>(),
+        NotificationPermission::Denied
     );
 }

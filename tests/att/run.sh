@@ -9,6 +9,7 @@ fi
 cd "$(dirname "$0")/../.."
 mkdir -p target/att-tests
 swiftc -swift-version 6 -parse-as-library \
+    Sources/Platform/NativePromptCoordinator.swift tests/att/NativePromptTests.swift \
     Sources/Att/TrackingRequestCoordinator.swift tests/att/TrackingRequestTests.swift \
     Sources/Ads/ConsentRequestCoordinator.swift tests/att/ConsentRequestTests.swift \
     -o target/att-tests/TrackingRequestTests

@@ -8,6 +8,7 @@ enum TrackingRequestTests {
         await waitsAndRetriesInterruptedRequest()
         await coalescesConcurrentRequests()
         await ConsentRequestTests.run()
+        await NativePromptTests.run()
         print("ATT_TESTS_PASSED: existing decisions, foreground/presentation waits, interruption retry, coalescing")
     }
 
