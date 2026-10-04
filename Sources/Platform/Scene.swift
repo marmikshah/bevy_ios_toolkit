@@ -10,6 +10,12 @@ import ObjectiveC
     static weak var scene: UIWindowScene?
     static let pending = NSHashTable<UIWindow>.weakObjects()
     static var installed = false
+    static var minimumSize: CGSize?
+
+    static func setMinimumSize(_ size: CGSize) {
+        minimumSize = size
+        scene?.sizeRestrictions?.minimumSize = size
+    }
 
     static func install() {
         guard !installed else { return }
@@ -52,6 +58,9 @@ public final class BevyIosToolkitSceneDelegate: NSObject, UIWindowSceneDelegate 
         guard let scene = scene as? UIWindowScene,
               session.role == .windowApplication else { return }
         SceneConnection.scene = scene
+        if let size = SceneConnection.minimumSize {
+            scene.sizeRestrictions?.minimumSize = size
+        }
         SceneConnection.install()
         let pending = SceneConnection.pending.allObjects
         SceneConnection.pending.removeAllObjects()
@@ -74,7 +83,20 @@ public func platform_register_scene_delegate() {
     _ = NSStringFromClass(BevyIosToolkitSceneDelegate.self)
     MainActor.assumeIsolated { SceneConnection.install() }
 }
+
+@_cdecl("platform_set_minimum_window_size")
+public func platform_set_minimum_window_size(_ width: Float, _ height: Float) {
+    guard width.isFinite, height.isFinite, width > 0, height > 0 else { return }
+    let size = CGSize(width: CGFloat(width), height: CGFloat(height))
+    if Thread.isMainThread {
+        MainActor.assumeIsolated { SceneConnection.setMinimumSize(size) }
+    } else {
+        DispatchQueue.main.async { SceneConnection.setMinimumSize(size) }
+    }
+}
 #else
 @_cdecl("platform_register_scene_delegate")
 public func platform_register_scene_delegate() {}
+@_cdecl("platform_set_minimum_window_size")
+public func platform_set_minimum_window_size(_ width: Float, _ height: Float) {}
 #endif

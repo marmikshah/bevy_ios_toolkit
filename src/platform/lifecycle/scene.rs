@@ -27,3 +27,23 @@ pub fn register() {
         platform_register_scene_delegate();
     }
 }
+
+/// Set the smallest supported iPad window in logical points. Call before run;
+/// the toolkit applies it when the scene connects, or to an existing scene.
+/// UIKit ignores this on devices without window size restrictions. Invalid
+/// dimensions are ignored. Worker calls queue on UIKit without waiting for it.
+#[cfg(target_os = "ios")]
+pub fn set_minimum_window_size(width: f32, height: f32) {
+    if !width.is_finite() || !height.is_finite() || width <= 0. || height <= 0. {
+        return;
+    }
+    unsafe {
+        unsafe extern "C" {
+            fn platform_set_minimum_window_size(width: f32, height: f32);
+        }
+        platform_set_minimum_window_size(width, height);
+    }
+}
+
+#[cfg(not(target_os = "ios"))]
+pub fn set_minimum_window_size(_width: f32, _height: f32) {}

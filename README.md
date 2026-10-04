@@ -162,6 +162,10 @@ are no files to vendor or keep in sync by hand.
 With `platform`, call `platform::screen_size()` on the main thread before
 building `WindowPlugin` to size its initial window in **points**. After launch,
 it returns the key window's bounds, including resized iPad windows.
+Use `platform::scene::set_minimum_window_size(width, height)` before running an
+app whose controls need a minimum window size. Dimensions are logical points;
+the toolkit applies the limit when UIKit connects its window scene, including
+calls made before that scene exists. Devices without size restrictions ignore it.
 
 On iOS, send `RequestAppStoreEnvironment` when ready for a possible Apple Account
 sign-in sheet. Reading `AppStoreEnvironment` leaves it `Pending` until requested;
