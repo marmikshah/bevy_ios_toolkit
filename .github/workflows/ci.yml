@@ -55,3 +55,9 @@ jobs:
         run: |
           xcodebuild -scheme Ads -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath target/swift-build CODE_SIGNING_ALLOWED=NO build
+      - name: Build native Store and Platform products
+        run: |
+          xcodebuild -scheme Store -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath target/swift-build CODE_SIGNING_ALLOWED=NO build
+          xcodebuild -scheme Platform -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath target/swift-build CODE_SIGNING_ALLOWED=NO build

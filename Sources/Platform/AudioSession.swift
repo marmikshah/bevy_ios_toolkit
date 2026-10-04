@@ -12,6 +12,12 @@ import UIKit
 // Retained so the foreground-reassert observer is installed at most once.
 @MainActor private var audioSessionObserver: NSObjectProtocol?
 
+/// Read before claiming the session, without a synchronous dispatch to UIKit.
+@_cdecl("platform_is_other_audio_playing")
+public func platform_is_other_audio_playing() -> Int32 {
+    AVAudioSession.sharedInstance().isOtherAudioPlaying ? 1 : 0
+}
+
 /// Own the app's audio session so nothing else — a full-screen video ad
 /// reconfiguring it, the OS default — can leave the game muted. `playback` != 0
 /// keeps sound on with the ring switch off (audio as a game feature, gated by
@@ -47,5 +53,7 @@ private func applyAudioSession(playback: Bool, mix: Bool) {
 }
 
 #else
+@_cdecl("platform_is_other_audio_playing")
+public func platform_is_other_audio_playing() -> Int32 { 0 }
 @_cdecl("platform_configure_audio_session") public func platform_configure_audio_session(_ playback: Int32, _ mixWithOthers: Int32) {}
 #endif

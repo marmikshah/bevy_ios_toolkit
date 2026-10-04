@@ -1,5 +1,7 @@
 use bevy::prelude::Resource;
 
+use crate::store_state::{ProductsState, StoreProducts};
+
 /// The one StoreKit operation currently in flight.
 ///
 /// Consumers render progress from this resource and suppress duplicate actions
@@ -43,9 +45,41 @@ pub(crate) fn finish_activity(activity: &mut StoreActivity) {
     *activity = StoreActivity::Idle;
 }
 
+pub(crate) fn begin_catalog_reload(products: &mut StoreProducts, activity: &StoreActivity) -> bool {
+    if !activity.is_idle() {
+        return false;
+    }
+    products.state = ProductsState::Loading;
+    products.items.clear();
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::store_state::ProductInfo;
+
+    #[test]
+    fn retry_clears_stale_prices_and_preserves_an_active_store_operation() {
+        let mut products = StoreProducts {
+            state: ProductsState::Failed,
+            items: vec![ProductInfo {
+                id: "com.example.supporter".into(),
+                display_name: "Supporter".into(),
+                display_price: "$0.99".into(),
+                description: String::new(),
+            }],
+        };
+        assert!(!begin_catalog_reload(
+            &mut products,
+            &StoreActivity::Restoring
+        ));
+        assert_eq!(products.state, ProductsState::Failed);
+        assert_eq!(products.items.len(), 1);
+        assert!(begin_catalog_reload(&mut products, &StoreActivity::Idle));
+        assert_eq!(products.state, ProductsState::Loading);
+        assert!(products.items.is_empty());
+    }
 
     #[test]
     fn purchase_activity_names_the_product_and_suppresses_overlap() {

@@ -23,3 +23,19 @@ pub fn configure(playback: bool, mix_with_others: bool) {
 
 #[cfg(not(target_os = "ios"))]
 pub fn configure(_playback: bool, _mix_with_others: bool) {}
+
+/// Whether another app is playing audio. Read before configuring this app's
+/// session to choose a launch-time music policy without changing saved volume.
+/// This reads the audio session directly; it never waits for UIKit's thread.
+#[cfg(target_os = "ios")]
+pub fn is_other_audio_playing() -> bool {
+    unsafe extern "C" {
+        fn platform_is_other_audio_playing() -> i32;
+    }
+    unsafe { platform_is_other_audio_playing() != 0 }
+}
+
+#[cfg(not(target_os = "ios"))]
+pub fn is_other_audio_playing() -> bool {
+    false
+}

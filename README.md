@@ -192,6 +192,15 @@ Use it to disable duplicate actions and keep progress visible until
 the operation result: always read `Entitlements`, including during launch-time
 reconciliation when no user-facing success message should be inferred.
 
+Send `ReloadStoreRequest` from a retry action to refresh the configured catalogue
+and entitlements. It does not call `AppStore.sync()` or ask for account login.
+The catalogue returns to `Loading`, stale prices are cleared, and overlapping
+native loads are coalesced. Explicit restoration still uses `RestoreRequest`.
+
+`platform::audio::is_other_audio_playing()` lets a game choose its launch-time
+music policy before calling `audio::configure`. Audio-session ownership and
+foreground restoration remain in the toolkit.
+
 ### Ads verify consent at startup
 
 Inserting `AdmobConfig` requests ATT at the first active window if undetermined.
