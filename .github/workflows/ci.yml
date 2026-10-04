@@ -76,14 +76,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772
-        with:
-          toolchain: stable
-          targets: aarch64-apple-ios-sim
-      - uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3
-        with:
-          workspaces: demo
-          cache-on-failure: true
       - run: brew install xcodegen
       - name: Verify the native test toolchain
         run: |
@@ -144,9 +136,11 @@ jobs:
       - name: Execute native StoreKit scenarios
         run: |
           set -euo pipefail
-          xcodegen generate --spec demo/ios/project.yml --project demo/ios
-          xcodebuild test -project demo/ios/IosToolkitDemo.xcodeproj -scheme IosToolkitDemo \
+          mkdir -p target/native-storekit-project
+          xcodegen generate --spec tests/ios/project.yml --project target/native-storekit-project --project-root tests/ios
+          xcodebuild test -project target/native-storekit-project/ToolkitStoreTests.xcodeproj -scheme ToolkitStoreTests \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" -parallel-testing-enabled NO \
+            -testLanguage en -testRegion US \
             -only-testing:ToolkitUITests/StoreKitTests -derivedDataPath target/native-storekit \
             -resultBundlePath target/storekit.xcresult CODE_SIGNING_ALLOWED=YES \
             CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM= \

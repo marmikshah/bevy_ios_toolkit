@@ -99,12 +99,12 @@ For a real (non-test) build, swap the test ad ids for your own and turn off
 
 ## Simulator regression checks
 
-After building and installing the demo, run `tests/ios/demo.sh SIMULATOR_UDID`
-from the repository root. It checks rendered controls, deferred environment
-resolution, mounted banner height, touch input, and background/foreground
-recovery. Screenshots and XCTest results go in `target/`. Run on both iOS 26.x
-and iOS 27; the same SDK 27 build must work on both. `tests/ios/run.sh` separately
-checks scene attachment and startup/window measurements without the ad SDK.
+`tests/ios/run.sh SIMULATOR_UDID` checks scene attachment and startup/window
+measurements without the ad SDK. Run on both iOS 26.x and iOS 27; the same
+SDK 27 build must work on both. `tests/ios/storekit.sh SIMULATOR_UDID` runs
+purchase, retry, cancellation, approval, restore and refund scenarios against
+the production Store bridge in a small native host on iOS 26.1. XCTest reads
+native controls and statuses. These tests do not compile the Bevy demo.
 StoreKit uses Marmik's Playground (`com.marmikshah.playground`) and its live
 `iap.playground.removeads` product. Consent follows the device's saved choices
 and Google's response for its location. Authenticated purchase and restore

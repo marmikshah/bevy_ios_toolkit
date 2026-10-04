@@ -62,21 +62,15 @@ pub fn run() {
         ),
     );
 
-    // Local StoreKit tests exercise the real native adapter without requiring
-    // network ad fill. A production device ignores this fixture switch.
-    if !(AppEnvironment::current().is_development()
-        && std::env::var("BEVY_DEMO_STORE_TEST").as_deref() == Ok("1"))
-    {
-        app.insert_resource(AdmobConfig {
-            // Automatic by default; the ATT button exercises explicit timing.
-            tracking_prompt: if std::env::var("BEVY_DEMO_MANUAL_ATT").as_deref() == Ok("1") {
-                AdTrackingPrompt::Manual
-            } else {
-                AdTrackingPrompt::Automatic
-            },
-            ..AdmobConfig::test_ads()
-        });
-    }
+    app.insert_resource(AdmobConfig {
+        // Automatic by default; the ATT button exercises explicit timing.
+        tracking_prompt: if std::env::var("BEVY_DEMO_MANUAL_ATT").as_deref() == Ok("1") {
+            AdTrackingPrompt::Manual
+        } else {
+            AdTrackingPrompt::Automatic
+        },
+        ..AdmobConfig::test_ads()
+    });
 
     #[cfg(target_os = "ios")]
     app.insert_resource(StoreConfig {
