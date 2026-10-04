@@ -285,3 +285,9 @@ pub fn consent_presentations() -> u32 {
 pub fn complete_consent() {
     lock().complete_consent();
 }
+
+/// Consent verification/form completion, independent of permission to serve ads.
+pub unsafe fn admob_consent_check_complete() -> i32 {
+    let fake = lock();
+    (fake.initializations > 0 && (!fake.consent_pending || fake.fail_consent_updates)) as i32
+}

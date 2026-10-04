@@ -20,11 +20,8 @@
 //
 // Integration (per game):
 //   1. Link this package's `Notifications` product from your app target.
-//   2. To catch a notification that LAUNCHED the app, call
-//      notifications_install_delegate() from your app delegate's
-//      didFinishLaunchingWithOptions. iOS delivers that response very early, and
-//      a response delivered with no delegate set is gone. Installing from Rust's
-//      first frame catches everything after that, and is idempotent.
+//   2. NotificationsPlugin installs the delegate during app construction,
+//      before winit enters UIApplicationMain. Consumers need no Swift bootstrap.
 //
 // Shared state (the event queue + cached authorization) lives behind an
 // OSAllocatedUnfairLock so async system callbacks and the synchronous C-ABI
@@ -33,22 +30,27 @@
 import Foundation
 import os
 
-#if canImport(UserNotifications)
+#if canImport(UserNotifications) && canImport(UIKit)
 import UserNotifications
+import UIKit
+import Platform
 
 private struct NotificationsSharedState {
     /// 0 not-determined, 1 denied, 2 authorized, 3 provisional.
-    var status: Int32 = 0
+    var status: Int32 = -1
     var events: [[String: Any]] = []
     var eventsJSONPtr: UnsafeMutablePointer<CChar>?
     var delegateInstalled = false
     var refreshing = false
+    var lastRefresh: TimeInterval = 0
 }
 
 final class NotificationsBridge: NSObject, @unchecked Sendable {
     static let shared = NotificationsBridge()
 
     private let shared_ = OSAllocatedUnfairLock(initialState: NotificationsSharedState())
+    @MainActor private var requestPending = false
+    @MainActor private var foregroundObserver: NSObjectProtocol?
 
     // MARK: State
 
@@ -56,8 +58,10 @@ final class NotificationsBridge: NSObject, @unchecked Sendable {
         // Answer from cache, then refresh behind the caller's back. One refresh
         // in flight at a time: this is called every frame.
         let shouldRefresh = shared_.withLock { state -> Bool in
-            if state.refreshing { return false }
+            let now = ProcessInfo.processInfo.systemUptime
+            if state.refreshing || (state.status >= 0 && now - state.lastRefresh < 5) { return false }
             state.refreshing = true
+            state.lastRefresh = now
             return true
         }
         if shouldRefresh {
@@ -106,24 +110,54 @@ final class NotificationsBridge: NSObject, @unchecked Sendable {
             return state.delegateInstalled
         }
         guard !alreadyInstalled else { return }
-        // Setting the delegate touches UIKit-adjacent state; keep it on main.
-        DispatchQueue.main.async {
-            UNUserNotificationCenter.current().delegate = self
+        // Plugin construction occurs before winit enters UIApplicationMain.
+        // Register immediately on main so a cold notification open is captured.
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { self.installOnMain() }
+        } else {
+            Task { @MainActor in self.installOnMain() }
+        }
+    }
+
+    @MainActor
+    private func installOnMain() {
+        UNUserNotificationCenter.current().delegate = self
+        refreshNow()
+        if foregroundObserver == nil {
+            foregroundObserver = NotificationCenter.default.addObserver(
+                forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { [weak self] _ in Task { @MainActor in self?.refreshNow() } }
         }
     }
 
     func request() {
-        UNUserNotificationCenter.current()
-            .requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] _, _ in
-                // Ignore the granted flag and read the settings back: it is the
-                // authoritative answer, and it also covers provisional.
-                self?.refreshNow()
+        Task { @MainActor in
+            guard !self.requestPending else { return }
+            self.requestPending = true
+            defer { self.requestPending = false }
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            self.shared_.withLock { $0.status = Self.code(for: settings.authorizationStatus) }
+            guard settings.authorizationStatus == .notDetermined else { return }
+            guard let lease = await NativePromptCoordinator.shared.begin(
+                .notifications, canPresent: canPresentNativeSheet
+            ) else { return }
+            defer { NativePromptCoordinator.shared.end(lease) }
+            do {
+                _ = try await UNUserNotificationCenter.current()
+                    .requestAuthorization(options: [.alert, .sound, .badge])
+            } catch {
+                self.push(["kind": "permission_failed", "reason": error.localizedDescription])
             }
+            self.refreshNow()
+        }
     }
 
     private func refreshNow() {
         UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
-            self?.shared_.withLock { $0.status = Self.code(for: settings.authorizationStatus) }
+            self?.shared_.withLock {
+                $0.status = Self.code(for: settings.authorizationStatus)
+                $0.lastRefresh = ProcessInfo.processInfo.systemUptime
+            }
         }
     }
 

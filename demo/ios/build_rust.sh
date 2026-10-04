@@ -24,13 +24,13 @@ fi
 
 if [ "${CONFIGURATION:-Debug}" = "Release" ]; then
   PROFILE="release"
-  cargo build --lib --target "$RUST_TARGET" --release
+  cargo build --locked --lib --target "$RUST_TARGET" --release
 else
   PROFILE="debug"
-  cargo build --lib --target "$RUST_TARGET"
+  cargo build --locked --lib --target "$RUST_TARGET"
 fi
 
 DEST="$DEMO/ios/rustlib/${PLATFORM_NAME:-iphonesimulator}"
 mkdir -p "$DEST"
-cp -f "$DEMO/target/$RUST_TARGET/$PROFILE/libbevy_ios_toolkit_demo.a" "$DEST/libbevy_ios_toolkit_demo.a"
+cp -f "${CARGO_TARGET_DIR:-$DEMO/target}/$RUST_TARGET/$PROFILE/libbevy_ios_toolkit_demo.a" "$DEST/libbevy_ios_toolkit_demo.a"
 echo "build_rust.sh: staged $DEST/libbevy_ios_toolkit_demo.a"

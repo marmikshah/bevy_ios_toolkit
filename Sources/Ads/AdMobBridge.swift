@@ -43,6 +43,7 @@ enum AdFormat: Int32 {
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
 import Att
+import Platform
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -54,6 +55,7 @@ private struct AdMobSharedState {
     var events: [[String: Any]] = []
     var consentStatus: Int32 = 0          // 0 unknown,1 required,2 not-required,3 obtained
     var canRequestAds = false
+    var consentCheckComplete = false
     var bannerHeight: Float = 0
     var privacyOptionsRequirement: Int32 = 0 // 0 unknown,1 required,2 not-required
     var eventsJSONPtr: UnsafeMutablePointer<CChar>?
@@ -66,12 +68,14 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
 
     // Touched only on the main actor.
     @MainActor private var sdkStarted = false
+    @MainActor private var privacyOptionsPending = false
     @MainActor private var interstitial: InterstitialAd?
     @MainActor private var rewarded: RewardedAd?
     @MainActor private var rewardedInterstitial: RewardedInterstitialAd?
     @MainActor private var appOpen: AppOpenAd?
     @MainActor private var banner: BannerView?
     @MainActor private var fullScreenDelegates: [AdFormat: FullScreenPresenter] = [:]
+    @MainActor private var presentingDelegate: FullScreenPresenter?
     @MainActor private var bannerDelegate: BannerObserver?
     @MainActor private var consentDebugGeography: Int32 = 0
     @MainActor private var consentTestDevices: [String] = []
@@ -82,8 +86,12 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
                 try await ConsentInformation.shared
                     .requestConsentInfoUpdate(with: self.consentRequestParameters())
                 self.cacheConsentStatus()
+                if ConsentInformation.shared.consentStatus != .required {
+                    self.shared_.withLock { $0.consentCheckComplete = true }
+                }
             } catch {
                 self.cacheConsentStatus()
+                self.shared_.withLock { $0.consentCheckComplete = true }
                 self.emitConsentUpdateFailure(error)
                 NSLog("[admob] consent info update failed: %@", String(describing: error))
                 throw error
@@ -91,14 +99,13 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
         },
         requiresConsent: { ConsentInformation.shared.consentStatus == .required },
         canRequestAds: { ConsentInformation.shared.canRequestAds },
-        canPresent: {
-            guard UIApplication.shared.applicationState == .active,
-                  let vc = self.rootViewController() else { return false }
-            return vc.viewIfLoaded?.window != nil
-                && vc.presentedViewController == nil
-                && !vc.isBeingPresented && !vc.isBeingDismissed
-        },
+        canPresent: { canPresentNativeSheet() && NativePromptCoordinator.shared.isIdle },
         prompt: {
+            guard let lease = NativePromptCoordinator.shared.tryBegin(.consent) else { return }
+            defer {
+                NativePromptCoordinator.shared.end(lease)
+                self.shared_.withLock { $0.consentCheckComplete = true }
+            }
             do {
                 try await ConsentForm.loadAndPresentIfRequired(from: self.rootViewController())
                 self.cacheConsentStatus()
@@ -142,6 +149,7 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     }
 
     func consentStatusValue() -> Int32 { shared_.withLock { $0.consentStatus } }
+    func sharedConsentCheckComplete() -> Int32 { shared_.withLock { $0.consentCheckComplete ? 1 : 0 } }
     func canRequestAdsValue() -> Int32 { shared_.withLock { $0.canRequestAds ? 1 : 0 } }
     func privacyOptionsRequirementValue() -> Int32 {
         shared_.withLock { $0.privacyOptionsRequirement }
@@ -199,7 +207,7 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
         Task { @MainActor in await self.consentRequest.resolve() }
         #else
         setConsentStatus(3) // no UMP: treat as obtained
-        shared_.withLock { $0.canRequestAds = true }
+        shared_.withLock { $0.canRequestAds = true; $0.consentCheckComplete = true }
         setPrivacyOptionsRequirement(2)
         startSDKIfPermitted()
         #endif
@@ -208,8 +216,15 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     @MainActor
     func presentPrivacyOptions() {
         #if canImport(UserMessagingPlatform)
+        guard !privacyOptionsPending else { return }
+        privacyOptionsPending = true
         Task { @MainActor [weak self] in
             guard let self else { return }
+            defer { self.privacyOptionsPending = false }
+            guard let lease = await NativePromptCoordinator.shared.begin(
+                .consent, canPresent: canPresentNativeSheet
+            ) else { return }
+            defer { NativePromptCoordinator.shared.end(lease) }
             do {
                 try await ConsentForm.presentPrivacyOptionsForm(
                     from: self.rootViewController()
@@ -314,25 +329,40 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
             emit(format, "show_failed", error: "ATT or UMP is not ready")
             return
         }
-        guard let vc = rootViewController() else {
-            emit(format, "show_failed", error: "no root view controller")
+        guard format != .banner else { return }
+        guard canPresentNativeSheet(), let vc = rootViewController(),
+              let lease = NativePromptCoordinator.shared.tryBegin(.advertisement) else {
+            emit(format, "show_failed", error: "native presenter is unavailable")
             return
         }
+        guard let presenter = fullScreenDelegates[format] else {
+            NativePromptCoordinator.shared.end(lease)
+            emit(format, "show_failed", error: "ad delegate unavailable")
+            return
+        }
+        var handedOff = false
+        defer { if !handedOff { NativePromptCoordinator.shared.end(lease); presenter.presentation = nil; presentingDelegate = nil } }
+        presenter.presentation = lease
+        presentingDelegate = presenter
         switch format {
         case .interstitial:
             guard let ad = interstitial else { return emit(format, "show_failed", error: "ad not loaded") }
+            handedOff = true
             ad.present(from: vc)
         case .appOpen:
             guard let ad = appOpen else { return emit(format, "show_failed", error: "ad not loaded") }
+            handedOff = true
             ad.present(from: vc)
         case .rewarded:
             guard let ad = rewarded else { return emit(format, "show_failed", error: "ad not loaded") }
+            handedOff = true
             ad.present(from: vc) { [weak self, weak ad] in
                 guard let ad else { return }
                 self?.emit(.rewarded, "reward", rewardAmount: ad.adReward.amount.intValue, rewardType: ad.adReward.type)
             }
         case .rewardedInterstitial:
             guard let ad = rewardedInterstitial else { return emit(format, "show_failed", error: "ad not loaded") }
+            handedOff = true
             ad.present(from: vc) { [weak self, weak ad] in
                 guard let ad else { return }
                 self?.emit(.rewardedInterstitial, "reward", rewardAmount: ad.adReward.amount.intValue, rewardType: ad.adReward.type)
@@ -343,7 +373,14 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
     }
 
     @MainActor
-    func clear(_ format: AdFormat) {
+    fileprivate func clear(_ format: AdFormat, owner: FullScreenPresenter) {
+        guard presentingDelegate === owner else { return }
+        if let lease = owner.presentation { NativePromptCoordinator.shared.end(lease) }
+        owner.presentation = nil
+        presentingDelegate = nil
+        // An old SDK callback cannot discard a newer loaded creative.
+        guard fullScreenDelegates[format] === owner else { return }
+        fullScreenDelegates.removeValue(forKey: format)
         switch format {
         case .interstitial: interstitial = nil
         case .rewarded: rewarded = nil
@@ -442,7 +479,6 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
 
     @MainActor
     private func delegate(for format: AdFormat) -> FullScreenPresenter {
-        if let d = fullScreenDelegates[format] { return d }
         let d = FullScreenPresenter(format: format, bridge: self)
         fullScreenDelegates[format] = d
         return d
@@ -461,7 +497,8 @@ final class AdMobBridge: NSObject, @unchecked Sendable {
 // Per-format delegate for full-screen ads, retained by the bridge while a
 // creative is alive. Maps SDK callbacks back to events tagged with the format.
 @MainActor
-private final class FullScreenPresenter: NSObject, FullScreenContentDelegate {
+fileprivate final class FullScreenPresenter: NSObject, FullScreenContentDelegate {
+    var presentation: NativePromptCoordinator.Lease?
     let format: AdFormat
     unowned let bridge: AdMobBridge
 
@@ -478,11 +515,11 @@ private final class FullScreenPresenter: NSObject, FullScreenContentDelegate {
     }
     func ad(_ ad: FullScreenPresentingAd, didFailToPresentFullScreenContentWithError error: Error) {
         bridge.emit(format, "show_failed", error: String(describing: error))
-        bridge.clear(format)
+        bridge.clear(format, owner: self)
     }
     func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
         bridge.emit(format, "dismissed")
-        bridge.clear(format)
+        bridge.clear(format, owner: self)
     }
 }
 
@@ -573,6 +610,11 @@ public func admob_present_privacy_options() {
 @_cdecl("admob_consent_status")
 public func admob_consent_status() -> Int32 { AdMobBridge.shared.consentStatusValue() }
 
+@_cdecl("admob_consent_check_complete")
+public func admob_consent_check_complete() -> Int32 {
+    AdMobBridge.shared.sharedConsentCheckComplete()
+}
+
 @_cdecl("admob_can_request_ads")
 public func admob_can_request_ads() -> Int32 { AdMobBridge.shared.canRequestAdsValue() }
 
@@ -604,6 +646,7 @@ public func admob_init_with_ump_test(
 @_cdecl("admob_request_consent") public func admob_request_consent() {}
 @_cdecl("admob_present_privacy_options") public func admob_present_privacy_options() {}
 @_cdecl("admob_consent_status") public func admob_consent_status() -> Int32 { 3 }
+@_cdecl("admob_consent_check_complete") public func admob_consent_check_complete() -> Int32 { 1 }
 @_cdecl("admob_can_request_ads") public func admob_can_request_ads() -> Int32 { 1 }
 @_cdecl("admob_privacy_options_requirement_status")
 public func admob_privacy_options_requirement_status() -> Int32 { 2 }

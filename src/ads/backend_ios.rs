@@ -37,6 +37,7 @@ unsafe extern "C" {
     /// 0 unknown, 1 required, 2 not-required, 3 obtained.
     pub fn admob_consent_status() -> i32;
     /// Whether UMP currently permits ad requests (0/1).
+    pub fn admob_consent_check_complete() -> i32;
     pub fn admob_can_request_ads() -> i32;
     /// 0 unknown, 1 required, 2 not-required.
     pub fn admob_privacy_options_requirement_status() -> i32;

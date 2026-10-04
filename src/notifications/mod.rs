@@ -124,9 +124,17 @@ use backend_fake as backend;
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum Event {
     /// The app was opened by tapping this notification.
-    Opened { id: String },
+    Opened {
+        id: String,
+    },
     /// The system accepted the request and then refused it.
-    ScheduleFailed { id: String, reason: String },
+    ScheduleFailed {
+        id: String,
+        reason: String,
+    },
+    PermissionFailed {
+        reason: String,
+    },
 }
 
 /// Whether the app may show notifications.
@@ -134,6 +142,8 @@ enum Event {
 pub enum NotificationPermission {
     /// Nobody has been asked yet.
     #[default]
+    Checking,
+    /// Settings confirm the player has not answered.
     NotDetermined,
     /// Asked and refused. Only Settings can change this.
     Denied,
@@ -150,7 +160,8 @@ impl NotificationPermission {
             1 => Self::Denied,
             2 => Self::Authorized,
             3 => Self::Provisional,
-            _ => Self::NotDetermined,
+            0 => Self::NotDetermined,
+            _ => Self::Checking,
         }
     }
 
@@ -163,7 +174,7 @@ impl NotificationPermission {
     /// Whether the prompt can still be shown. Asking again once the answer is
     /// in shows nothing — send the player to Settings instead.
     pub fn is_determined(self) -> bool {
-        !matches!(self, Self::NotDetermined)
+        !matches!(self, Self::Checking | Self::NotDetermined)
     }
 }
 
@@ -235,10 +246,18 @@ pub struct NotificationScheduleFailed {
     pub reason: String,
 }
 
+/// The OS could not complete authorization. A failed request is not a denial.
+#[derive(Message, Clone, Debug)]
+pub struct NotificationPermissionFailed {
+    pub reason: String,
+}
+
 pub struct NotificationsPlugin;
 
 impl Plugin for NotificationsPlugin {
     fn build(&self, app: &mut App) {
+        crate::configure_systems(app);
+        install_delegate();
         app.init_resource::<NotificationPermission>()
             .init_resource::<PendingNotifications>()
             .add_message::<RequestNotificationPermission>()
@@ -246,13 +265,16 @@ impl Plugin for NotificationsPlugin {
             .add_message::<CancelNotification>()
             .add_message::<CancelAllNotifications>()
             .add_message::<NotificationPermissionChanged>()
+            .add_message::<NotificationPermissionFailed>()
             .add_message::<NotificationOpened>()
             .add_message::<NotificationScheduleFailed>()
-            .add_systems(Startup, install_delegate)
             .add_systems(
                 Update,
-                (pump_requests, pump_schedules, pump_cancels, poll).chain(),
-            );
+                (pump_requests, pump_schedules, pump_cancels)
+                    .chain()
+                    .in_set(crate::IosSystems::Dispatch),
+            )
+            .add_systems(Update, poll.in_set(crate::IosSystems::Poll));
     }
 }
 
@@ -334,6 +356,7 @@ fn poll(
     mut pending: ResMut<PendingNotifications>,
     mut changed: MessageWriter<NotificationPermissionChanged>,
     mut opened: MessageWriter<NotificationOpened>,
+    mut permission_failed: MessageWriter<NotificationPermissionFailed>,
     mut failed: MessageWriter<NotificationScheduleFailed>,
 ) {
     let current = NotificationPermission::from_i32(unsafe { backend::notifications_status() });
@@ -343,6 +366,9 @@ fn poll(
     }
     for event in drain_events() {
         match event {
+            Event::PermissionFailed { reason } => {
+                permission_failed.write(NotificationPermissionFailed { reason });
+            }
             Event::Opened { id } => {
                 // It has been delivered, so it is no longer waiting.
                 pending.0.retain(|kept| *kept != id);
@@ -362,4 +388,4 @@ fn drain_events() -> Vec<Event> {
 }
 
 #[cfg(all(test, not(target_os = "ios")))]
-mod tests;
+pub(crate) mod tests;

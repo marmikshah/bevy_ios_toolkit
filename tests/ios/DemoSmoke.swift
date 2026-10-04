@@ -3,7 +3,8 @@ import Vision
 
 /// Drive the installed Bevy demo through its rendered controls. Bevy draws
 /// these labels into Metal, so OCR locates them instead of accessibility ids.
-final class DemoSmoke: XCTestCase {
+@MainActor
+class RenderedDemoTestCase: XCTestCase {
     struct Label {
         let text: String
         let bounds: CGRect
@@ -30,15 +31,10 @@ final class DemoSmoke: XCTestCase {
                       regions: [CGRect(x: 0, y: 0, width: 1, height: 1)])
     }
 
-    func statusText(in app: XCUIApplication) throws -> String {
-        var regions = [CGRect(x: 0, y: 0, width: 1, height: 1)]
-        if app.frame.width > 600 {
-            // Read long iPad status lines in shorter regions for OCR.
-            regions += [CGRect(x: 0, y: 0.75, width: 0.5, height: 0.25),
-                        CGRect(x: 0.5, y: 0.75, width: 0.5, height: 0.25)]
-        }
-        return try recognize(XCUIScreen.main.screenshot().pngRepresentation, regions: regions)
-            .map(\.text).joined(separator: " ")
+    func statusText(in _: XCUIApplication) throws -> String {
+        // The demo keeps each status field in short, bounded-width rows on
+        // both devices. Reading one image avoids splitting a field at a crop.
+        try labels().map(\.text).joined(separator: " ")
     }
 
     func waitFor(_ text: String, in app: XCUIApplication) throws -> Label {
@@ -134,6 +130,10 @@ final class DemoSmoke: XCTestCase {
         add(attachment)
     }
 
+}
+
+@MainActor
+final class DemoSmoke: RenderedDemoTestCase {
     func testLaunchBannerAndForeground() throws {
         continueAfterFailure = false
         addUIInterruptionMonitor(withDescription: "Tracking permission") { alert in

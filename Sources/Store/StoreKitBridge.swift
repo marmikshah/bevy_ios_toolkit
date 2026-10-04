@@ -19,6 +19,7 @@ import os
 
 #if canImport(StoreKit)
 import StoreKit
+import Platform
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -195,7 +196,11 @@ final class StoreBridge: @unchecked Sendable {
             return
         }
 
-        Task {
+        Task { @MainActor in
+            guard let lease = await NativePromptCoordinator.shared.begin(
+                .purchase, canPresent: canPresentNativeSheet
+            ) else { self.setPurchaseState(3); return }
+            defer { NativePromptCoordinator.shared.end(lease) }
             do {
                 switch try await product.purchase() {
                 case .success(let verification):
@@ -244,7 +249,11 @@ final class StoreBridge: @unchecked Sendable {
         }
         guard shouldStart else { return }
 
-        Task {
+        Task { @MainActor in
+            guard let lease = await NativePromptCoordinator.shared.begin(
+                .restore, canPresent: canPresentNativeSheet
+            ) else { self.setRestoreState(3); return }
+            defer { NativePromptCoordinator.shared.end(lease) }
             do {
                 try await AppStore.sync()
                 let reconciled = await self.entitlementReconciler.reconcile()

@@ -46,18 +46,121 @@ jobs:
         with:
           persist-credentials: false
       - run: tests/att/run.sh
-      - name: Type-check the iOS ATT bridge
-        run: |
-          xcrun --sdk iphonesimulator swiftc -swift-version 6 -typecheck \
-            -target arm64-apple-ios26.0-simulator \
-            -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" Sources/Att/*.swift
       - name: Build native Ads and transitive Att products
         run: |
           xcodebuild -scheme Ads -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath target/swift-build CODE_SIGNING_ALLOWED=NO build
-      - name: Build native Store and Platform products
+      - name: Build native Store, Notifications and Platform products
         run: |
           xcodebuild -scheme Store -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath target/swift-build CODE_SIGNING_ALLOWED=NO build
+          xcodebuild -scheme Notifications -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath target/swift-build CODE_SIGNING_ALLOWED=NO build
           xcodebuild -scheme Platform -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath target/swift-build CODE_SIGNING_ALLOWED=NO build
+
+  storekit:
+    name: Native StoreKit
+    if: github.event.pull_request.draft == false
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      # Keep XCTest's runner/frameworks aligned with the StoreKitTest runtime.
+      # The hosted image's default Xcode changes independently of that runtime.
+      DEVELOPER_DIR: /Applications/Xcode_26.1.1.app/Contents/Developer
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [phone, tablet]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772
+        with:
+          toolchain: stable
+          targets: aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3
+        with:
+          workspaces: demo
+          cache-on-failure: true
+      - run: brew install xcodegen
+      - name: Verify the native test toolchain
+        run: |
+          test -d "$DEVELOPER_DIR"
+          xcodebuild -version
+          # Initialize platform components for this Xcode, rather than the
+          # hosted image's default. This Mac is discarded after the job.
+          sudo env DEVELOPER_DIR="$DEVELOPER_DIR" xcodebuild -runFirstLaunch
+          xcodebuild -showsdks
+      - name: Create an isolated simulator
+        env:
+          DEVICE: ${{ matrix.device }}
+        run: |
+          set -euo pipefail
+          xcrun simctl list runtimes --json > "$RUNNER_TEMP/runtimes.json"
+          # 26.3-26.5 fail SKTestSession configuration outside Xcode; 26.2
+          # ignores loadProducts error injection. Keep all scenarios executable.
+          # https://developer.apple.com/forums/thread/826971
+          # https://developer.apple.com/forums/thread/808030
+          if ! python3 - "$RUNNER_TEMP/runtimes.json" <<'PY'
+          import json, sys
+          available = any(r.get('isAvailable') and r['name'].startswith('iOS')
+                          and tuple(map(int, r['version'].split('.')))[:2] == (26, 1)
+                          for r in json.load(open(sys.argv[1]))['runtimes'])
+          sys.exit(0 if available else 1)
+          PY
+          then
+            # This job uses a disposable GitHub-hosted Mac, never Whiskey.
+            # Let Xcode 26.1.1 choose its matching patched 26.1 runtime.
+            xcodebuild -downloadPlatform iOS -architectureVariant arm64
+            xcrun simctl list runtimes --json > "$RUNNER_TEMP/runtimes.json"
+          fi
+          runtime="$(python3 - "$RUNNER_TEMP/runtimes.json" <<'PY'
+          import json, sys
+          runtimes = [r for r in json.load(open(sys.argv[1]))['runtimes']
+                      if r.get('isAvailable') and r['name'].startswith('iOS')
+                      and tuple(map(int, r['version'].split('.')))[:2] == (26, 1)]
+          if not runtimes:
+              raise SystemExit('iOS 26.1 StoreKitTest runtime is unavailable')
+          print(max(runtimes, key=lambda r: tuple(map(int, r['version'].split('.'))))['identifier'])
+          PY
+          )"
+          xcrun simctl list devicetypes --json > "$RUNNER_TEMP/device-types.json"
+          device_type="$(python3 - "$RUNNER_TEMP/device-types.json" "$DEVICE" <<'PY'
+          import json, sys
+          entries = json.load(open(sys.argv[1]))['devicetypes']
+          choices = [d for d in entries if (d['name'] == 'iPhone 16 Pro Max' if sys.argv[2] == 'phone'
+                     else d['name'].startswith('iPad Pro 13-inch'))]
+          if not choices:
+              raise SystemExit('Required iPhone 6.9-inch / iPad device type is unavailable')
+          print(choices[0]['identifier'])
+          PY
+          )"
+          udid="$(xcrun simctl create "toolkit-$GITHUB_RUN_ID-$DEVICE" "$device_type" "$runtime")"
+          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+      - name: Execute native StoreKit scenarios
+        run: |
+          set -euo pipefail
+          xcodegen generate --spec demo/ios/project.yml --project demo/ios
+          xcodebuild test -project demo/ios/IosToolkitDemo.xcodeproj -scheme IosToolkitDemo \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" -parallel-testing-enabled NO \
+            -only-testing:ToolkitUITests/StoreKitTests -derivedDataPath target/native-storekit \
+            -resultBundlePath target/storekit.xcresult CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM= \
+            PROVISIONING_PROFILE_SPECIFIER=
+      - name: Retain native diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: storekit-${{ matrix.device }}
+          path: target/storekit.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Remove the test simulator
+        if: always() && env.SIMULATOR_UDID != ''
+        run: |
+          xcrun simctl shutdown "$SIMULATOR_UDID" || true
+          xcrun simctl delete "$SIMULATOR_UDID"
