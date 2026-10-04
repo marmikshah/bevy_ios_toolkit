@@ -25,7 +25,9 @@ use bevy::prelude::*;
 mod backend;
 
 pub use crate::store_operation::StoreActivity;
-use crate::store_operation::{finish_activity, start_purchase, start_restore};
+use crate::store_operation::{
+    begin_catalog_reload, finish_activity, start_purchase, start_restore,
+};
 use crate::store_state::decode_entitlement_snapshot;
 pub use crate::store_state::{
     Entitlements, EntitlementsState, ProductInfo, ProductsState, StoreProducts,
@@ -69,6 +71,12 @@ pub struct PurchaseRequest(pub String);
 /// Request restoration of past purchases (`AppStore.sync()`).
 #[derive(Message, Clone, Debug)]
 pub struct RestoreRequest;
+
+/// Retry the configured product catalogue and verified entitlement read.
+/// Unlike restoration, this does not call `AppStore.sync()` or request login.
+/// Requests during a purchase/restore are ignored; native loads are coalesced.
+#[derive(Message, Clone, Debug)]
+pub struct ReloadStoreRequest;
 
 /// Emitted when the catalogue state or contents change.
 #[derive(Message, Clone, Debug)]
@@ -213,6 +221,7 @@ impl Plugin for StorePlugin {
             .init_resource::<StorePoll>()
             .add_message::<PurchaseRequest>()
             .add_message::<RestoreRequest>()
+            .add_message::<ReloadStoreRequest>()
             .add_message::<ProductsUpdated>()
             .add_message::<PurchaseCompleted>()
             .add_message::<RestoreCompleted>()
@@ -277,13 +286,16 @@ fn init_once(config: Option<Res<StoreConfig>>, mut poll: ResMut<StorePoll>) {
 }
 
 /// Forward consumer requests to the backend.
+#[allow(clippy::too_many_arguments)]
 fn pump_requests(
-    poll: Res<StorePoll>,
-    products: Res<StoreProducts>,
+    mut poll: ResMut<StorePoll>,
+    mut products: ResMut<StoreProducts>,
     entitlements: Res<Entitlements>,
     mut activity: ResMut<StoreActivity>,
     mut buys: MessageReader<PurchaseRequest>,
     mut restores: MessageReader<RestoreRequest>,
+    mut reloads: MessageReader<ReloadStoreRequest>,
+    mut products_updated: MessageWriter<ProductsUpdated>,
     mut purchase_completed: MessageWriter<PurchaseCompleted>,
 ) {
     if !poll.inited {
@@ -321,6 +333,13 @@ fn pump_requests(
             continue;
         }
         restore();
+    }
+    if reloads.read().count() > 0 && begin_catalog_reload(&mut products, &activity) {
+        // Set the Rust state as well as the backend: even a load completing
+        // between frames must be read again when it returns to Ready.
+        poll.last_products = ProductsState::Loading;
+        products_updated.write(ProductsUpdated);
+        unsafe { backend::store_reload() };
     }
 }
 

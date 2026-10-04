@@ -110,6 +110,8 @@ actor EntitlementReconciler {
 private struct StoreState {
     var environmentStarted = false
     var storeStarted = false
+    var productIDs: [String] = []
+    var productsLoading = false
     // 0 pending, 1 Xcode, 2 sandbox, 3 production, 4 unavailable, 5 unknown
     var environmentState: Int32 = 0
     var products: [Product] = []
@@ -151,13 +153,12 @@ final class StoreBridge: @unchecked Sendable {
         let shouldStart = state.withLock { state -> Bool in
             guard !state.storeStarted else { return false }
             state.storeStarted = true
-            state.productsState = 0
+            state.productIDs = ids
             return true
         }
         guard shouldStart else { return }
 
-        Task { await self.loadProducts(ids) }
-        Task { _ = await self.entitlementReconciler.reconcile() }
+        reload()
 
         // Catch purchases on other devices, Ask-to-Buy approvals, renewals,
         // revocations, and other transactions delivered while the app runs.
@@ -167,6 +168,20 @@ final class StoreBridge: @unchecked Sendable {
             }
         }
         installForegroundRefresh()
+    }
+
+    func reload() {
+        guard state.withLock({ $0.storeStarted }) else { return }
+        let ids = state.withLock { state -> [String]? in
+            guard !state.productsLoading else { return nil }
+            state.productsLoading = true
+            state.productsState = 0
+            state.products = []
+            state.productsJSON = "[]"
+            return state.productIDs
+        }
+        if let ids { Task { await self.loadProducts(ids) } }
+        Task { _ = await self.entitlementReconciler.reconcile() }
     }
 
     func purchase(_ id: String) {
@@ -286,10 +301,14 @@ final class StoreBridge: @unchecked Sendable {
                 state.products = fetched
                 state.productsJSON = json
                 state.productsState = 1
+                state.productsLoading = false
             }
         } catch {
             NSLog("[store] product load failed: %@", String(describing: error))
-            state.withLock { $0.productsState = 2 }
+            state.withLock {
+                $0.productsState = 2
+                $0.productsLoading = false
+            }
         }
     }
 
@@ -468,6 +487,9 @@ public func store_init(_ ids: UnsafePointer<CChar>) {
 @_cdecl("store_products_state")
 public func store_products_state() -> Int32 { StoreBridge.shared.productsStateValue() }
 
+@_cdecl("store_reload")
+public func store_reload() { StoreBridge.shared.reload() }
+
 @_cdecl("store_products_json")
 public func store_products_json() -> UnsafeMutablePointer<CChar>? {
     StoreBridge.shared.productsJSONValue()
@@ -529,6 +551,7 @@ public func store_environment_init() {
 }
 @_cdecl("store_environment_state") public func store_environment_state() -> Int32 { 4 }
 @_cdecl("store_init") public func store_init(_ ids: UnsafePointer<CChar>) {}
+@_cdecl("store_reload") public func store_reload() {}
 @_cdecl("store_products_state") public func store_products_state() -> Int32 { 2 }
 @_cdecl("store_products_json")
 public func store_products_json() -> UnsafeMutablePointer<CChar>? { nil }

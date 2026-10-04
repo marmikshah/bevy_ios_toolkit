@@ -162,6 +162,10 @@ are no files to vendor or keep in sync by hand.
 With `platform`, call `platform::screen_size()` on the main thread before
 building `WindowPlugin` to size its initial window in **points**. After launch,
 it returns the key window's bounds, including resized iPad windows.
+Use `platform::scene::set_minimum_window_size(width, height)` before running an
+app whose controls need a minimum window size. Dimensions are logical points;
+the toolkit applies the limit when UIKit connects its window scene, including
+calls made before that scene exists. Devices without size restrictions ignore it.
 
 On iOS, send `RequestAppStoreEnvironment` when ready for a possible Apple Account
 sign-in sheet. Reading `AppStoreEnvironment` leaves it `Pending` until requested;
@@ -191,6 +195,15 @@ Use it to disable duplicate actions and keep progress visible until
 `PurchaseCompleted` or `RestoreCompleted` arrives. Ownership never comes from
 the operation result: always read `Entitlements`, including during launch-time
 reconciliation when no user-facing success message should be inferred.
+
+Send `ReloadStoreRequest` from a retry action to refresh the configured catalogue
+and entitlements. It does not call `AppStore.sync()` or ask for account login.
+The catalogue returns to `Loading`, stale prices are cleared, and overlapping
+native loads are coalesced. Explicit restoration still uses `RestoreRequest`.
+
+`platform::audio::is_other_audio_playing()` lets a game choose its launch-time
+music policy before calling `audio::configure`. Audio-session ownership and
+foreground restoration remain in the toolkit.
 
 ### Ads verify consent at startup
 

@@ -105,8 +105,8 @@ pub mod prelude {
     pub use crate::store::{
         AppStoreEnvironment, Entitlements, EntitlementsChanged, EntitlementsState, ProductInfo,
         ProductsState, ProductsUpdated, PurchaseCompleted, PurchaseOutcome, PurchaseRequest,
-        RequestAppStoreEnvironment, RestoreCompleted, RestoreOutcome, RestoreRequest,
-        StoreActivity, StoreConfig, StoreProducts,
+        ReloadStoreRequest, RequestAppStoreEnvironment, RestoreCompleted, RestoreOutcome,
+        RestoreRequest, StoreActivity, StoreConfig, StoreProducts,
     };
 
     #[cfg(feature = "ads")]

@@ -15,6 +15,8 @@ unsafe extern "C" {
     /// Begin: fetch products for the comma-separated ids and start the
     /// `Transaction.updates` listener + an entitlements refresh.
     pub fn store_init(ids: *const c_char);
+    /// Retry product loading and reconcile entitlements without AppStore.sync().
+    pub fn store_reload();
     /// 0 = loading, 1 = ready, 2 = failed.
     pub fn store_products_state() -> i32;
     /// JSON `[{id, display_name, display_price, description}]`.
