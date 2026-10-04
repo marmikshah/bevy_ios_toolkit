@@ -15,7 +15,7 @@ elif [[ $# -eq 2 ]]; then
 fi
 cd "$(dirname "$0")/../.."
 output="$PWD/target/storekit-$1"
-mkdir -p "$output"
+mkdir -p "$output" target/native-storekit-project
 xcodegen generate --spec tests/ios/project.yml --project target/native-storekit-project --project-root tests/ios
 xcodebuild -project target/native-storekit-project/ToolkitStoreTests.xcodeproj -scheme ToolkitStoreTests \
     -destination "platform=iOS Simulator,id=$1" -parallel-testing-enabled NO \
