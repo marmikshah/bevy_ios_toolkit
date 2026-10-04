@@ -124,29 +124,8 @@ targets:
         name: Build Rust static library
         basedOnDependencyAnalysis: false
 
-  ToolkitUITests:
-    type: bundle.ui-testing
-    platform: iOS
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.marmikshah.playground.uitests
-        TEST_TARGET_NAME: IosToolkitDemo
-        GENERATE_INFOPLIST_FILE: YES
-        SWIFT_VERSION: "5.0"
-    sources:
-      - path: ../../tests/ios/DemoSmoke.swift
-      - path: ../../tests/ios/StoreKitTests.swift
-      - path: ../../tests/ios/Toolkit.storekit
-    dependencies:
-      - target: IosToolkitDemo
-
 schemes:
   IosToolkitDemo:
     build:
       targets:
         IosToolkitDemo: all
-        ToolkitUITests: [test]
-    test:
-      config: Debug
-      targets:
-        - ToolkitUITests

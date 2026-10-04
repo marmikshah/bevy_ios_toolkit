@@ -254,7 +254,7 @@ tests/att/run.sh # native prompt ownership, ATT and UMP coordination
 cargo run --example ads   --features ads
 cargo check --target aarch64-apple-ios --features storekit
 tests/ios/run.sh BOOTED_SIMULATOR_UDID # UIKit checks; run on iOS 26.x and 27
-tests/ios/demo.sh BOOTED_SIMULATOR_UDID # rendered demo + StoreKitTest scenarios
+tests/ios/storekit.sh BOOTED_SIMULATOR_UDID # native Store bridge + StoreKitTest
 ```
 
 The applicable fakes are env-tunable (force no-fill, show-failures, consent
