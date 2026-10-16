@@ -137,7 +137,8 @@ pub mod prelude {
         AdShowFailed, AdShown, AdTrackingPrompt, AdmobConfig, AdmobState, BannerIntent,
         BannerPlugin, BannerPosition, ConsentInfoUpdateFailed, ConsentStatus, ConsentUpdated,
         HideBanner, LoadAd, PresentPrivacyOptions, PrivacyOptionsRequirement, RequestConsent,
-        RewardEarned, ShowAd, ShowBanner, TEST_APP_ID, TryShowAd, UmpDebugGeography, UmpTestConfig,
+        RewardEarned, ShowAd, ShowBanner, TEST_APP_ID, TryShowAd, UmpDebugGeography, UmpQa,
+        UmpTestConfig,
     };
 
     #[cfg(feature = "platform")]

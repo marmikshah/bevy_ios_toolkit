@@ -270,6 +270,16 @@ so default state never autosaves over unreadable progress. Writes are atomic
 `SaveFile::keep_rejected()` copies a rejected file to `<save>.invalid` before
 the reset; it is off by default.
 
+### UMP QA launches (`ads`)
+
+`UmpQa::from_env("MYGAME_")` reads `MYGAME_UMP_QA` (`eea`, `us` or `other`;
+`1` and `true` mean `eea`) and `MYGAME_UMP_TEST_DEVICE_ID` in debug and
+simulator builds only. A valid value resets consent at startup and selects that
+UMP test geography. Unknown values are logged and ignored, and the device id is
+ignored unless a geography is selected. Insert `qa.test` as the `UmpTestConfig`
+resource and call `qa.apply(&mut admob_config)` for the device id. Release
+device builds read no variables.
+
 ## Testing
 
 ```bash

@@ -13,6 +13,10 @@ Shared game helpers, consumed by Git revision. The crate version is unchanged.
 - `game_save`, a std-only workspace crate (`save/`) for atomic save files that
   refuse to autosave over unreadable progress. `SaveFile::keep_rejected` opts
   in to keeping a rejected save at `<save>.invalid`.
+- `ads::UmpQa::from_env(prefix)` reads `<PREFIX>UMP_QA` and
+  `<PREFIX>UMP_TEST_DEVICE_ID` in development builds into the existing
+  `UmpTestConfig` and AdMob test device ids. `UmpQa::from_vars` takes the build
+  environment and lookup explicitly.
 
 ## 0.7.0 — Unreleased
 
