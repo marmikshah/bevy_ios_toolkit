@@ -43,6 +43,12 @@
 //!   or one-shot [`ConsentInfoUpdateFailed`].
 //! - `BEVY_ADMOB_FAKE_PRIVACY_OPTIONS=required` — the privacy-options entry
 //!   point is required for the session.
+//!
+//! # UMP QA launches
+//!
+//! [`UmpQa::from_env`] reads a game's `<PREFIX>UMP_QA` (`eea`, `us`, `other`)
+//! and `<PREFIX>UMP_TEST_DEVICE_ID` in development builds, producing the
+//! [`UmpTestConfig`] and test device ids for a regional consent test.
 
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -55,6 +61,8 @@ use crate::ffi::read_cstr;
 
 mod banner;
 pub use banner::{BannerIntent, BannerPlugin};
+mod ump_qa;
+pub use ump_qa::UmpQa;
 
 #[cfg(target_os = "ios")]
 #[path = "backend_ios.rs"]
@@ -1261,6 +1269,46 @@ mod tests {
             app.update();
             assert_eq!(backend::ump_test_config(), (wire, true));
         }
+    }
+
+    #[test]
+    fn ump_qa_launch_reaches_the_backend_only_with_test_ads() {
+        let _guard = guarded();
+        let vars = |name: &str| match name {
+            "GAME_UMP_QA" => Some("us".into()),
+            "GAME_UMP_TEST_DEVICE_ID" => Some("HASHED".into()),
+            _ => None,
+        };
+        let qa = UmpQa::from_vars(
+            crate::environment::AppEnvironment::Development,
+            "GAME_",
+            vars,
+        );
+        for (mut config, wire) in [
+            (AdmobConfig::test_ads(), (3, true)),
+            (AdmobConfig::default(), (0, false)),
+        ] {
+            backend::reset();
+            qa.apply(&mut config);
+            let mut app = build_app();
+            app.insert_resource(config).insert_resource(qa.test);
+            app.update();
+            assert_eq!(backend::ump_test_config(), wire);
+            assert_eq!(backend::test_devices(), "HASHED");
+        }
+        backend::reset();
+        let qa = UmpQa::from_vars(
+            crate::environment::AppEnvironment::Production,
+            "GAME_",
+            vars,
+        );
+        let mut config = AdmobConfig::test_ads();
+        qa.apply(&mut config);
+        let mut app = build_app();
+        app.insert_resource(config).insert_resource(qa.test);
+        app.update();
+        assert_eq!(backend::ump_test_config(), (0, false));
+        assert_eq!(backend::test_devices(), "");
     }
 
     #[test]

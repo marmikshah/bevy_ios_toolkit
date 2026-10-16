@@ -26,6 +26,7 @@ struct Fake {
     privacy_options_presentations: u32,
     consent_debug_geography: i32,
     reset_consent: bool,
+    test_devices: String,
     loaded: HashSet<i32>,
     banner_height: f32,
     events: VecDeque<AdEvent>,
@@ -90,7 +91,7 @@ fn consent_update_failure() -> AdEvent {
 }
 
 pub unsafe fn admob_init_with_ump_test(
-    _test_devices: *const c_char,
+    test_devices: *const c_char,
     use_test_ads: i32,
     consent_debug_geography: i32,
     reset_consent: i32,
@@ -100,6 +101,7 @@ pub unsafe fn admob_init_with_ump_test(
     f.use_test_ads = use_test_ads != 0;
     f.consent_debug_geography = consent_debug_geography;
     f.reset_consent = reset_consent != 0;
+    f.test_devices = unsafe { super::read_cstr(test_devices) };
     f.consent = match std::env::var("BEVY_ADMOB_FAKE_CONSENT")
         .unwrap_or_default()
         .to_ascii_lowercase()
@@ -269,6 +271,12 @@ pub fn privacy_options_presentations() -> u32 {
 pub fn ump_test_config() -> (i32, bool) {
     let fake = lock();
     (fake.consent_debug_geography, fake.reset_consent)
+}
+
+/// The comma-joined test device ids from the last initialization.
+#[cfg(test)]
+pub fn test_devices() -> String {
+    lock().test_devices.clone()
 }
 
 #[cfg(test)]

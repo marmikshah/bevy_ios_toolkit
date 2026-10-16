@@ -23,6 +23,8 @@ exclude = ["demo"]
 bevy = { version = "0.19", default-features = false }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
+# Logging only (Bevy's LogPlugin collects it); already in Bevy's graph.
+tracing = { version = "0.1", default-features = false, features = ["std"], optional = true }
 
 [features]
 # No integration is on by default: each module's `extern "C"` block must only
@@ -30,7 +32,7 @@ serde_json = { version = "1", optional = true }
 # linking fails on undefined symbols. Opt in to exactly what you ship.
 default = []
 storekit = ["dep:serde", "dep:serde_json"]
-ads = ["dep:serde", "dep:serde_json", "att", "bevy/bevy_window"]
+ads = ["dep:serde", "dep:serde_json", "dep:tracing", "att", "bevy/bevy_window"]
 platform = []
 att = []
 gamekit = []

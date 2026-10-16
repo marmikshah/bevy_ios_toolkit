@@ -455,6 +455,7 @@ dependencies = [
  "bevy",
  "serde",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]
