@@ -5,6 +5,15 @@ format loosely [Keep a Changelog](https://keepachangelog.com). Entries begin
 from the point this file was added — earlier releases live in the crates.io
 version history and the git log.
 
+## Unreleased
+
+Shared game helpers, consumed by Git revision. The crate version is unchanged.
+
+### Added
+- `game_save`, a std-only workspace crate (`save/`) for atomic save files that
+  refuse to autosave over unreadable progress. `SaveFile::keep_rejected` opts
+  in to keeping a rejected save at `<save>.invalid`.
+
 ## 0.7.0 — Unreleased
 
 ### Changed
