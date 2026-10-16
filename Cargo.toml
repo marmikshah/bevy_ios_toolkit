@@ -33,7 +33,7 @@ tracing = { version = "0.1", default-features = false, features = ["std"], optio
 default = []
 storekit = ["dep:serde", "dep:serde_json"]
 ads = ["dep:serde", "dep:serde_json", "dep:tracing", "att", "bevy/bevy_window"]
-platform = []
+platform = ["bevy/bevy_window"]
 att = []
 gamekit = []
 review = []

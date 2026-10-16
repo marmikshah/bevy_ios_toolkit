@@ -17,6 +17,14 @@ Shared game helpers, consumed by Git revision. The crate version is unchanged.
   `<PREFIX>UMP_TEST_DEVICE_ID` in development builds into the existing
   `UmpTestConfig` and AdMob test device ids. `UmpQa::from_vars` takes the build
   environment and lookup explicitly.
+- `platform::SafeArea`, a resource with the safe-area insets and window size,
+  refreshed by `PlatformPlugin` in `PreUpdate` after window, focus and
+  lifecycle changes, with short startup retries and a two-second fallback.
+  `safe_area::insets()` is unchanged.
+
+### Changed
+- `platform` enables Bevy's `bevy_window` feature for the window messages that
+  drive `SafeArea` refreshes.
 
 ## 0.7.0 — Unreleased
 
