@@ -19,6 +19,32 @@
 //! ```
 //!
 //! Both are fire-and-forget and no-ops off iOS.
+//!
+//! # `BootShieldPlugin` (`boot-shield` feature)
+//!
+//! Counting app frames is not proof of visible pixels: cold pipeline
+//! compilation can run several updates before the first real present.
+//! [`BootShieldPlugin`] adds two render-world systems on iOS. The first paints
+//! each window's drawable with `ClearColor` for the first
+//! [`LAUNCH_PAINT_FRAMES`] frames and while any pipeline is still compiling, so
+//! an unwritten Metal drawable never shows. The second calls
+//! [`first_frame_presented`] after [`WARM_PRESENTS`] window presents with every
+//! pipeline ready, or after [`MAX_PRESENTS`] regardless. The game still calls
+//! [`show`] before building its app. [`BootShieldReady`] reports the dismissal
+//! to the main world.
+//!
+//! ```no_run
+//! # #[cfg(feature = "boot-shield")] {
+//! use bevy::prelude::*;
+//! use bevy_ios_toolkit::platform::boot_shield::{self, BootShieldPlugin};
+//!
+//! boot_shield::show(0.03, 0.04, 0.09);
+//! App::new()
+//!     .add_plugins((DefaultPlugins, BootShieldPlugin))
+//!     .insert_resource(ClearColor(Color::srgb(0.03, 0.04, 0.09)))
+//!     .run();
+//! # }
+//! ```
 
 /// Raise the boot shield: an opaque window in `(r, g, b)` (each `0.0..=1.0`)
 /// covering everything until [`first_frame_presented`] dismisses it. Call once
@@ -48,6 +74,14 @@ pub fn first_frame_presented() {
 
 #[cfg(not(target_os = "ios"))]
 pub fn first_frame_presented() {}
+
+#[cfg(feature = "boot-shield")]
+pub use plugin::{
+    BootShieldPlugin, BootShieldReady, LAUNCH_PAINT_FRAMES, MAX_PRESENTS, WARM_PRESENTS,
+};
+
+#[cfg(feature = "boot-shield")]
+mod plugin;
 
 #[cfg(test)]
 mod tests {

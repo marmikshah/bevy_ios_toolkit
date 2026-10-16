@@ -21,6 +21,10 @@ Shared game helpers, consumed by Git revision. The crate version is unchanged.
   refreshed by `PlatformPlugin` in `PreUpdate` after window, focus and
   lifecycle changes, with short startup retries and a two-second fallback.
   `safe_area::insets()` is unchanged.
+- An opt-in `boot-shield` feature with `platform::boot_shield::BootShieldPlugin`:
+  render-world systems that paint unwritten drawables for the first 8 frames
+  and while pipelines compile, and dismiss the shield after 2 warm or 12
+  window presents. `BootShieldReady` exposes the dismissal to the main world.
 
 ### Changed
 - `platform` enables Bevy's `bevy_window` feature for the window messages that
