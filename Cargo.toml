@@ -38,6 +38,9 @@ platform = ["bevy/bevy_window"]
 # unwritten launch drawables and lower the shield after real presents. Pulls in
 # Bevy's renderer, which a game with DefaultPlugins already builds.
 boot-shield = ["platform", "dep:tracing", "bevy/bevy_render"]
+# `capture`: desktop offscreen-render helpers. `WinitPlugin` is named so it can
+# be disabled; `x11` is the backend winit needs to compile on Linux.
+capture = ["bevy/bevy_render", "bevy/bevy_winit", "bevy/x11"]
 att = []
 gamekit = []
 review = []

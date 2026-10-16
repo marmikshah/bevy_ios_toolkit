@@ -13,6 +13,7 @@
 //! | `notifications` | [`notifications`] | local user notifications |
 //! | `platform` | [`platform`] | haptics, safe-area insets, links, share sheet, thermal/low-power state, boot shield, audio session |
 //! | `boot-shield` | [`platform::boot_shield`] | `BootShieldPlugin`, lowering the boot shield after real presents |
+//! | `capture` | `capture` | desktop offscreen rendering for screenshots and recordings |
 //!
 //! No feature is on by default. Enable exactly what you ship — a module's
 //! `extern "C"` block only exists when its feature is on, and the matching Swift
@@ -117,6 +118,12 @@ pub mod review;
 
 #[cfg(feature = "notifications")]
 pub mod notifications;
+
+#[cfg(all(
+    feature = "capture",
+    any(target_os = "macos", target_os = "windows", target_os = "linux")
+))]
+pub mod capture;
 
 pub mod prelude {
     pub use crate::environment::AppEnvironment;

@@ -14,6 +14,7 @@ ECS resources and messages. One crate, one plugin, a **feature per integration**
 | `platform` | `platform` | haptics, safe-area insets, outbound links, share sheet, thermal/low-power state |
 | `notifications` | `notifications` | local user notifications (no APNs) |
 | `boot-shield` | `platform::boot_shield` | `BootShieldPlugin`: lower the launch shield after real presents |
+| `capture` | `capture` | desktop offscreen rendering for screenshots and recordings |
 
 > **Status: experimental (0.8, pre-v1).** APIs will move. Live behaviour
 > needs a real device, the relevant Apple/Google setup, and the matching Swift
@@ -301,6 +302,17 @@ the shield after 2 window presents with every pipeline ready, or after 12.
 `BootShieldReady::is_ready()` reports the dismissal to the main world, for a
 splash clock; it is ready immediately off iOS. Keep calling `show` before
 building the app. The feature enables Bevy's renderer.
+
+### Offscreen capture (`capture`, desktop)
+
+`capture::headless(DefaultPlugins.build())` compiles pipelines synchronously
+and removes `WinitPlugin` and pipelined rendering, so a capture never opens a
+window and reads back on the frame it advanced. `capture::target_image(w, h)`
+allocates an sRGB RGBA8 target in physical pixels, and
+`capture::image_target(handle, scale)` points a camera at it with the game's
+own scale factor. `parse_size("1320x2868")` and `parse_non_negative` parse
+capture arguments. The feature enables Bevy's renderer and winit (with X11 for
+Linux builds); the module exists on macOS, Windows and Linux only.
 
 ## Testing
 
