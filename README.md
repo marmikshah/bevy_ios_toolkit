@@ -59,7 +59,8 @@ devices.
 
 Keep deterministic rules in a headless engine crate, and rendering, controls and
 placement policy in the game crate. Keep platform-independent persistence in
-a local engine module, separate from the simulation and native services.
+the engine, separate from the simulation and native services; `game_save` (see
+"Shared game helpers") provides the file handling.
 Pin this library's Rust and Swift halves to the same Git revision.
 
 ## Features are opt-in for a reason
@@ -246,10 +247,34 @@ because something the player asked to know about actually happened — never to
 drag them back. Restraint is yours to enforce, which is what the desktop fake
 exists to let you test.
 
+## Shared game helpers
+
+These pieces are not part of a crates.io release. Games pin them by Git
+revision, the same revision as the toolkit itself.
+
+### Save files (`game_save`)
+
+`save/` is a standard-library-only crate with no Bevy dependency, for a
+headless engine crate:
+
+```toml
+[dependencies]
+game_save = { git = "https://github.com/marmikshah/bevy_ios_toolkit", rev = "…" }
+```
+
+`SaveFile::load(decode, encode)` reads the save through the game's codec,
+creates a missing file, and resets one the codec rejects. A read failure
+blocks writes from the file and every clone until an explicit load succeeds,
+so default state never autosaves over unreadable progress. Writes are atomic
+(`<save>.tmp`, sync, rename) and store exactly the bytes given.
+`SaveFile::keep_rejected()` copies a rejected file to `<save>.invalid` before
+the reset; it is off by default.
+
 ## Testing
 
 ```bash
 bin/check.sh # formatting, strict linting, and tests; --help for scope
+cargo test -p game_save # the std-only save crate alone
 tests/att/run.sh # native prompt ownership, ATT and UMP coordination
 cargo run --example ads   --features ads
 cargo check --target aarch64-apple-ios --features storekit

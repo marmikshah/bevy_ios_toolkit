@@ -11,6 +11,13 @@ categories = ["game-development", "api-bindings"]
 # of the published library.
 exclude = ["demo"]
 
+[workspace]
+# The root package is a member implicitly; listing "." would also claim the
+# excluded demo. `save/` is the std-only `game_save` crate, consumed by Git
+# revision. The demo keeps its own manifest and lockfile.
+members = ["save"]
+exclude = ["demo"]
+
 [dependencies]
 # Minimal: the bridge is pure data + ECS plumbing, no render/UI surface.
 bevy = { version = "0.19", default-features = false }
