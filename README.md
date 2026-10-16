@@ -280,6 +280,16 @@ ignored unless a geography is selected. Insert `qa.test` as the `UmpTestConfig`
 resource and call `qa.apply(&mut admob_config)` for the device id. Release
 device builds read no variables.
 
+### Safe-area resource (`platform`)
+
+Read `Res<SafeArea>` for the four insets and window size in points instead of
+calling `safe_area::insets()` from each system; every direct call queues
+main-thread refreshes on iOS. `PlatformPlugin` refreshes the resource in
+`PreUpdate`: at startup and after window creation, resize, focus or resume it
+reads every 250 ms for up to 12 reads, then every two seconds. It changes only
+when a value does. `SafeArea::measured_size()` rejects an unset window size.
+Off iOS the insets are zero.
+
 ## Testing
 
 ```bash

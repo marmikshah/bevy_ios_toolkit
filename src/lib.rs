@@ -142,7 +142,9 @@ pub mod prelude {
     };
 
     #[cfg(feature = "platform")]
-    pub use crate::platform::{self, Haptic, PowerState, PowerStateChanged, ThermalState};
+    pub use crate::platform::{
+        self, Haptic, PowerState, PowerStateChanged, SafeArea, ThermalState,
+    };
 
     #[cfg(feature = "att")]
     pub use crate::att::{RequestTracking, TrackingStatus, TrackingStatusChanged};

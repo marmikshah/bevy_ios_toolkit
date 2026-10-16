@@ -10,8 +10,9 @@
 //!   the first-frame [`boot_shield`] and owning the [`audio`] session. Re-exported
 //!   flat here for convenience.
 //! - **Device state** ([`power`]) — thermal pressure and Low Power Mode, polled
-//!   into a resource. The only part of this module that needs
-//!   [`PlatformPlugin`]; everything else is a plain function you call directly.
+//!   into a resource. With the [`SafeArea`] resource, the only parts of this
+//!   module that need [`PlatformPlugin`]; everything else is a plain function
+//!   you call directly.
 //!
 //! ```no_run
 //! use bevy_ios_toolkit::platform::{haptics, safe_area, links, share, boot_shield, audio, Haptic};
@@ -37,6 +38,7 @@ pub mod share;
 pub use haptics::Haptic;
 pub use lifecycle::{audio, boot_shield, scene};
 pub use power::{PowerState, PowerStateChanged, ThermalState};
+pub use safe_area::SafeArea;
 pub use screen::screen_size;
 
 /// Wires the polled parts of this module. Installed by
@@ -50,5 +52,6 @@ impl Plugin for PlatformPlugin {
         app.init_resource::<PowerState>()
             .add_message::<PowerStateChanged>()
             .add_systems(Update, power::poll_power);
+        safe_area::install(app);
     }
 }
