@@ -13,6 +13,7 @@ ECS resources and messages. One crate, one plugin, a **feature per integration**
 | `review` | `review` | StoreKit review prompt |
 | `platform` | `platform` | haptics, safe-area insets, outbound links, share sheet, thermal/low-power state |
 | `notifications` | `notifications` | local user notifications (no APNs) |
+| `boot-shield` | `platform::boot_shield` | `BootShieldPlugin`: lower the launch shield after real presents |
 
 > **Status: experimental (0.8, pre-v1).** APIs will move. Live behaviour
 > needs a real device, the relevant Apple/Google setup, and the matching Swift
@@ -289,6 +290,17 @@ main-thread refreshes on iOS. `PlatformPlugin` refreshes the resource in
 reads every 250 ms for up to 12 reads, then every two seconds. It changes only
 when a value does. `SafeArea::measured_size()` rejects an unset window size.
 Off iOS the insets are zero.
+
+### Boot shield plugin (`boot-shield`)
+
+`platform::boot_shield::show` covers the uninitialized drawable at launch.
+The opt-in `boot-shield` feature adds `BootShieldPlugin`, which lowers it only
+after real presents. On iOS its render-world systems paint each drawable with
+`ClearColor` for the first 8 frames and while pipelines compile, then dismiss
+the shield after 2 window presents with every pipeline ready, or after 12.
+`BootShieldReady::is_ready()` reports the dismissal to the main world, for a
+splash clock; it is ready immediately off iOS. Keep calling `show` before
+building the app. The feature enables Bevy's renderer.
 
 ## Testing
 

@@ -34,6 +34,10 @@ default = []
 storekit = ["dep:serde", "dep:serde_json"]
 ads = ["dep:serde", "dep:serde_json", "dep:tracing", "att", "bevy/bevy_window"]
 platform = ["bevy/bevy_window"]
+# `platform::boot_shield::BootShieldPlugin`: render-world systems that paint
+# unwritten launch drawables and lower the shield after real presents. Pulls in
+# Bevy's renderer, which a game with DefaultPlugins already builds.
+boot-shield = ["platform", "dep:tracing", "bevy/bevy_render"]
 att = []
 gamekit = []
 review = []
