@@ -25,6 +25,10 @@ Shared game helpers, consumed by Git revision. The crate version is unchanged.
   render-world systems that paint unwritten drawables for the first 8 frames
   and while pipelines compile, and dismiss the shield after 2 warm or 12
   window presents. `BootShieldReady` exposes the dismissal to the main world.
+- A desktop-only `capture` feature: `capture::headless` for windowless
+  rendering, `target_image` and `image_target` for an image camera target at a
+  caller-chosen scale factor, and the `parse_size` / `parse_non_negative`
+  argument parsers.
 
 ### Changed
 - `platform` enables Bevy's `bevy_window` feature for the window messages that
