@@ -16,6 +16,10 @@ use super::{
 /// until a creative arrives, so loading and no-fill reserve no layout space.
 #[derive(Resource, Clone, Copy, Debug, Default)]
 pub struct BannerIntent {
+    /// The game wants the banner on this screen. [`BannerPlugin`] requests it
+    /// only while [`AdmobState::can_request_ads`] is also true and the app is
+    /// focused and in the foreground, checked in `Last`, so games need not
+    /// test ad readiness themselves.
     pub visible: bool,
     pub position: BannerPosition,
 }
