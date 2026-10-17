@@ -49,6 +49,8 @@ Shared game helpers, consumed by Git revision. The crate version is unchanged.
   `X` and whitespace around each number.
 
 ### Changed
+- `platform::links::open` opens URLs on Windows (`explorer`) and other Unix
+  desktops (`xdg-open`) as well as macOS; it still no-ops elsewhere.
 - `platform` enables Bevy's `bevy_window` feature for the window messages that
   drive `SafeArea` refreshes.
 
