@@ -39,6 +39,10 @@ Shared game helpers, consumed by Git revision. The crate version is unchanged.
   rendering, `target_image` and `image_target` for an image camera target at a
   caller-chosen scale factor, and the `parse_size` / `parse_non_negative`
   argument parsers.
+- `capture::attach_image_target`, `capture::window_resolution` and
+  `capture::fixed_clock` for the image target, logical window density and
+  deterministic frame clock of a capture. `capture::parse_size` also accepts
+  `X` and whitespace around each number.
 
 ### Changed
 - `platform` enables Bevy's `bevy_window` feature for the window messages that

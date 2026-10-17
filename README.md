@@ -328,8 +328,15 @@ and removes `WinitPlugin` and pipelined rendering, so a capture never opens a
 window and reads back on the frame it advanced. `capture::target_image(w, h)`
 allocates an sRGB RGBA8 target in physical pixels, and
 `capture::image_target(handle, scale)` points a camera at it with the game's
-own scale factor. `parse_size("1320x2868")` and `parse_non_negative` parse
-capture arguments. The feature enables Bevy's renderer and winit (with X11 for
+own scale factor; `capture::attach_image_target(&mut camera, &mut images, w,
+h, scale)` does both and returns the image. `capture::window_resolution(w, h,
+scale)` gives the logical window the same density: `w` x `h` pixels, laid out
+in `w / scale` by `h / scale` points. `capture::fixed_clock(&mut app, fps)`
+advances time by exactly one frame per update, raises `Time<Virtual>`'s
+maximum delta to match, and adds a `ScheduleRunnerPlugin` loop at that period
+unless the app already has a runner. `parse_size("1320x2868")` (also `X`, and
+spaces around the numbers) and `parse_non_negative` parse capture arguments.
+The feature enables Bevy's renderer and winit (with X11 for
 Linux builds); the module exists on macOS, Windows and Linux only.
 
 ## Testing
