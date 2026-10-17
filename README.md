@@ -300,6 +300,13 @@ device had those insets: it replaces the native insets on every platform while
 present, and takes effect on the next `PreUpdate`. `Insets::parse("59,34")`
 reads `top,bottom,left,right` from a launch argument or variable.
 
+### Initial window size (`platform`)
+
+`platform::initial_resolution((390, 844))` sizes the primary window from
+`screen_size()` in points when UIKit has measured it, and otherwise returns
+the fallback, which is what desktop builds get. Fractional points are
+truncated.
+
 ### Boot shield plugin (`boot-shield`)
 
 `platform::boot_shield::show` covers the uninitialized drawable at launch.

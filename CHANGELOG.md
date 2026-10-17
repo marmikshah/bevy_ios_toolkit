@@ -26,6 +26,8 @@ Shared game helpers, consumed by Git revision. The crate version is unchanged.
   `safe_area::SafeAreaEmulation` substitutes stand-in insets for desktop
   captures, `safe_area::RefreshSafeArea` names the refresh system set, and
   `Insets::parse` reads `top,bottom,left,right`.
+- `platform::initial_resolution(fallback)`: the measured screen size in points
+  as a `WindowResolution`, or the fallback when unmeasured or off iOS.
 - An opt-in `boot-shield` feature with `platform::boot_shield::BootShieldPlugin`:
   render-world systems that paint unwritten drawables for the first 8 frames
   and while pipelines compile, and dismiss the shield after 2 warm or 12

@@ -277,9 +277,10 @@ fn refresh(
     mut current: ResMut<SafeArea>,
 ) {
     // Inserting, changing or removing the emulation reads at once.
-    let emulation_changed =
-        emulation.as_ref().is_some_and(|emulation| emulation.is_changed())
-            || *emulated != emulation.is_some();
+    let emulation_changed = emulation
+        .as_ref()
+        .is_some_and(|emulation| emulation.is_changed())
+        || *emulated != emulation.is_some();
     *emulated = emulation.is_some();
     let requested = events.requested();
     // Without a clock there is no rate limit to keep: read every frame.

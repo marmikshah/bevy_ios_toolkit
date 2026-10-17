@@ -39,7 +39,7 @@ pub use haptics::Haptic;
 pub use lifecycle::{audio, boot_shield, scene};
 pub use power::{PowerState, PowerStateChanged, ThermalState};
 pub use safe_area::{SafeArea, SafeAreaPlugin};
-pub use screen::screen_size;
+pub use screen::{initial_resolution, screen_size};
 
 /// Wires the polled parts of this module. Installed by
 /// [`IosPlugin`](crate::IosPlugin); the fire-and-forget functions need none of
