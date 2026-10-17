@@ -140,7 +140,8 @@ are no files to vendor or keep in sync by hand.
      in dev), add `NSUserTrackingUsageDescription` and Google's
      `SKAdNetworkItems`, and provide a visible
      action that sends `PresentPrivacyOptions` whenever the
-     `PrivacyOptionsRequirement` resource is `Required`.
+     `PrivacyOptionsRequirement` resource is `Required`
+     (`requirement.is_required()`).
    - **att** — add `NSUserTrackingUsageDescription` to `Info.plist`.
    - **gamekit** — enable the Game Center capability.
    - **storekit** — define products in App Store Connect (or a StoreKit config).

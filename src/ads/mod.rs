@@ -236,6 +236,13 @@ pub enum PrivacyOptionsRequirement {
 }
 
 impl PrivacyOptionsRequirement {
+    /// Whether to show the privacy-options action now: only
+    /// [`Required`](Self::Required). `Unknown` reads as not required until the
+    /// consent-info refresh completes.
+    pub const fn is_required(self) -> bool {
+        matches!(self, Self::Required)
+    }
+
     fn from_i32(v: i32) -> Self {
         match v {
             1 => Self::Required,
@@ -450,7 +457,8 @@ pub struct RequestConsent;
 /// Present the UMP privacy-options form in response to a visible user action.
 ///
 /// Only send this while the [`PrivacyOptionsRequirement`] resource is
-/// [`PrivacyOptionsRequirement::Required`].
+/// [`PrivacyOptionsRequirement::Required`]
+/// ([`PrivacyOptionsRequirement::is_required`]).
 #[derive(Message, Clone, Debug)]
 pub struct PresentPrivacyOptions;
 
@@ -1225,6 +1233,11 @@ mod tests {
             PrivacyOptionsRequirement::Required
         );
         assert_eq!(backend::privacy_options_presentations(), 0);
+        assert!(
+            app.world()
+                .resource::<PrivacyOptionsRequirement>()
+                .is_required()
+        );
 
         app.world_mut()
             .resource_mut::<Messages<PresentPrivacyOptions>>()
@@ -1249,6 +1262,12 @@ mod tests {
             *app.world().resource::<PrivacyOptionsRequirement>(),
             PrivacyOptionsRequirement::NotRequired
         );
+        assert!(
+            !app.world()
+                .resource::<PrivacyOptionsRequirement>()
+                .is_required()
+        );
+        assert!(!PrivacyOptionsRequirement::Unknown.is_required());
     }
 
     #[test]
