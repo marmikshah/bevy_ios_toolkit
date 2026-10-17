@@ -7,9 +7,22 @@
 //! breathing-room margin.
 //!
 //! Each [`insets`] call queues main-thread refreshes on iOS. Systems should read
-//! the [`SafeArea`] resource instead: [`PlatformPlugin`](super::PlatformPlugin)
-//! refreshes it in `PreUpdate`, quickly after window, focus and lifecycle
-//! changes and then every two seconds.
+//! the [`SafeArea`] resource instead: [`SafeAreaPlugin`] (added by
+//! [`PlatformPlugin`](super::PlatformPlugin)) refreshes it in `PreUpdate`,
+//! quickly after window, focus and lifecycle changes and then every two
+//! seconds. Desktop and capture apps can add [`SafeAreaPlugin`] alone, and
+//! insert [`SafeAreaEmulation`] to lay out as if the device had insets.
+//!
+//! ```no_run
+//! use bevy::prelude::*;
+//! use bevy_ios_toolkit::platform::safe_area::{Insets, SafeAreaEmulation, SafeAreaPlugin};
+//!
+//! App::new()
+//!     .add_plugins((MinimalPlugins, SafeAreaPlugin))
+//!     // A desktop capture laid out like a phone with a home indicator.
+//!     .insert_resource(SafeAreaEmulation(Insets { top: 59.0, bottom: 34.0, ..default() }))
+//!     .run();
+//! ```
 
 use std::time::Duration;
 
@@ -30,6 +43,34 @@ pub struct Insets {
     pub left: f32,
     /// Right rounded-corner / sensor edge (landscape).
     pub right: f32,
+}
+
+impl Insets {
+    /// Parse `top,bottom,left,right` in points, such as `59,34` or
+    /// `0,21,59,59`. Missing trailing edges are zero; each value must be a
+    /// finite number of at least zero, and at most four may be given.
+    /// Surrounding whitespace is ignored.
+    pub fn parse(value: &str) -> Result<Self, String> {
+        let mut edges = [0.0_f32; 4];
+        let parts: Vec<&str> = value.split(',').map(str::trim).collect();
+        if parts.len() > edges.len() {
+            return Err("at most four insets: top,bottom,left,right".to_string());
+        }
+        for (edge, part) in edges.iter_mut().zip(parts) {
+            *edge = part
+                .parse::<f32>()
+                .ok()
+                .filter(|inset| inset.is_finite() && *inset >= 0.0)
+                .ok_or_else(|| format!("invalid inset {part:?}: must be a non-negative number"))?;
+        }
+        let [top, bottom, left, right] = edges;
+        Ok(Self {
+            top,
+            bottom,
+            left,
+            right,
+        })
+    }
 }
 
 #[cfg(target_os = "ios")]
@@ -72,10 +113,12 @@ pub fn top() -> f32 {
 
 /// The safe-area insets and window size in points, shared by every reader.
 ///
-/// Kept current by [`PlatformPlugin`](super::PlatformPlugin) and written only
-/// when a value changes, so `Res<SafeArea>::is_changed` marks real layout
-/// changes. Insets stay zero off iOS and until UIKit installs the key window.
-/// Values are UIKit points, before any `UiScale`.
+/// Kept current by [`SafeAreaPlugin`], which
+/// [`PlatformPlugin`](super::PlatformPlugin) adds, and written only when a
+/// value changes, so `Res<SafeArea>::is_changed` marks real layout changes.
+/// Insets stay zero off iOS and until UIKit installs the key window, unless
+/// [`SafeAreaEmulation`] is present. Values are UIKit points, before any
+/// `UiScale`.
 #[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
 pub struct SafeArea {
     pub insets: Insets,
@@ -181,7 +224,38 @@ impl RefreshEvents<'_, '_> {
     }
 }
 
-pub(crate) fn install(app: &mut App) {
+/// Stand-in insets for builds without real ones, such as desktop store
+/// captures laid out like a phone. While this resource exists,
+/// [`SafeAreaPlugin`] reports these insets in place of the native reading on
+/// every platform; [`SafeArea::size`] is still measured. Inserting, changing or
+/// removing it takes effect on the next `PreUpdate`.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
+pub struct SafeAreaEmulation(pub Insets);
+
+/// The `PreUpdate` system set that refreshes [`SafeArea`]. Order `PreUpdate`
+/// readers `.after(RefreshSafeArea)` to see this frame's reading.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RefreshSafeArea;
+
+/// Keeps the [`SafeArea`] resource current. [`PlatformPlugin`](super::PlatformPlugin)
+/// adds it; add it directly to desktop or capture apps that read
+/// `Res<SafeArea>` without the rest of the platform module. It needs no window
+/// plugin and may be added more than once.
+pub struct SafeAreaPlugin;
+
+impl Plugin for SafeAreaPlugin {
+    fn build(&self, app: &mut App) {
+        if !app.world().contains_resource::<SafeAreaPolling>() {
+            install(app);
+        }
+    }
+
+    fn is_unique(&self) -> bool {
+        false
+    }
+}
+
+fn install(app: &mut App) {
     // Registered here too so the plugin works without `WindowPlugin`.
     app.add_message::<WindowCreated>()
         .add_message::<WindowResized>()
@@ -190,16 +264,23 @@ pub(crate) fn install(app: &mut App) {
         .init_resource::<SafeArea>()
         .init_resource::<SafeAreaSource>()
         .init_resource::<SafeAreaPolling>()
-        .add_systems(PreUpdate, refresh);
+        .add_systems(PreUpdate, refresh.in_set(RefreshSafeArea));
 }
 
 fn refresh(
     time: Option<Res<Time<Real>>>,
     source: Res<SafeAreaSource>,
+    emulation: Option<Res<SafeAreaEmulation>>,
+    mut emulated: Local<bool>,
     mut polling: ResMut<SafeAreaPolling>,
     mut events: RefreshEvents,
     mut current: ResMut<SafeArea>,
 ) {
+    // Inserting, changing or removing the emulation reads at once.
+    let emulation_changed =
+        emulation.as_ref().is_some_and(|emulation| emulation.is_changed())
+            || *emulated != emulation.is_some();
+    *emulated = emulation.is_some();
     let requested = events.requested();
     // Without a clock there is no rate limit to keep: read every frame.
     if let Some(time) = time {
@@ -207,11 +288,15 @@ fn refresh(
         if requested {
             polling.request(now);
         }
-        if !polling.take_due(now) {
+        if !polling.take_due(now) && !emulation_changed {
             return;
         }
     }
-    current.set_if_neq((source.0)());
+    let mut reading = (source.0)();
+    if let Some(emulation) = emulation {
+        reading.insets = emulation.0;
+    }
+    current.set_if_neq(reading);
 }
 
 #[cfg(test)]
@@ -282,6 +367,79 @@ mod tests {
             .add_plugins(crate::platform::PlatformPlugin);
         app.update();
         assert_eq!(*app.world().resource::<SafeArea>(), SafeArea::default());
+    }
+
+    #[test]
+    fn safe_area_plugin_works_alone_and_beside_the_platform_plugin() {
+        for platform_first in [false, true] {
+            let mut app = App::new();
+            app.add_plugins(MinimalPlugins);
+            if platform_first {
+                app.add_plugins((crate::platform::PlatformPlugin, SafeAreaPlugin));
+            } else {
+                app.add_plugins((SafeAreaPlugin, crate::platform::PlatformPlugin));
+            }
+            app.update();
+            assert_eq!(*app.world().resource::<SafeArea>(), SafeArea::default());
+        }
+        let mut app = App::new();
+        app.add_plugins(SafeAreaPlugin);
+        app.update();
+        assert_eq!(*app.world().resource::<SafeArea>(), SafeArea::default());
+    }
+
+    #[test]
+    fn emulated_insets_replace_the_reading_until_removed() {
+        let phone = Insets {
+            top: 59.0,
+            bottom: 34.0,
+            ..default()
+        };
+        let mut app = App::new();
+        app.add_plugins(bevy::time::TimePlugin)
+            .add_plugins(SafeAreaPlugin)
+            .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::ZERO))
+            .insert_resource(SafeAreaEmulation(phone));
+        app.update();
+        assert_eq!(app.world().resource::<SafeArea>().insets, phone);
+        // Changes apply at once, inside the poll's rate limit.
+        let landscape = Insets {
+            left: 59.0,
+            right: 59.0,
+            bottom: 21.0,
+            ..default()
+        };
+        app.insert_resource(SafeAreaEmulation(landscape));
+        app.update();
+        assert_eq!(app.world().resource::<SafeArea>().insets, landscape);
+        app.world_mut().remove_resource::<SafeAreaEmulation>();
+        app.update();
+        assert_eq!(*app.world().resource::<SafeArea>(), SafeArea::default());
+    }
+
+    #[test]
+    fn insets_parse_top_bottom_left_right() {
+        assert_eq!(
+            Insets::parse("59,34"),
+            Ok(Insets {
+                top: 59.0,
+                bottom: 34.0,
+                ..default()
+            })
+        );
+        assert_eq!(
+            Insets::parse(" 0, 21 ,59,59.5 "),
+            Ok(Insets {
+                top: 0.0,
+                bottom: 21.0,
+                left: 59.0,
+                right: 59.5,
+            })
+        );
+        assert_eq!(Insets::parse("0"), Ok(Insets::default()));
+        for bad in ["", "59,", "-1", "NaN", "inf", "a,b", "1,2,3,4,5"] {
+            assert!(Insets::parse(bad).is_err(), "{bad}");
+        }
     }
 
     // The test source is a plain `fn`, so its readings live in a static.

@@ -290,7 +290,15 @@ main-thread refreshes on iOS. `PlatformPlugin` refreshes the resource in
 `PreUpdate`: at startup and after window creation, resize, focus or resume it
 reads every 250 ms for up to 12 reads, then every two seconds. It changes only
 when a value does. `SafeArea::measured_size()` rejects an unset window size.
-Off iOS the insets are zero.
+Off iOS the insets are zero. Systems in `PreUpdate` that read it can run
+`.after(safe_area::RefreshSafeArea)`.
+
+Desktop and capture apps that do not install `PlatformPlugin` can add
+`SafeAreaPlugin` alone; adding both, in either order, is harmless. Insert
+`safe_area::SafeAreaEmulation(insets)` to lay a desktop build out as if the
+device had those insets: it replaces the native insets on every platform while
+present, and takes effect on the next `PreUpdate`. `Insets::parse("59,34")`
+reads `top,bottom,left,right` from a launch argument or variable.
 
 ### Boot shield plugin (`boot-shield`)
 
