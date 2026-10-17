@@ -21,6 +21,11 @@ Shared game helpers, consumed by Git revision. The crate version is unchanged.
   refreshed by `PlatformPlugin` in `PreUpdate` after window, focus and
   lifecycle changes, with short startup retries and a two-second fallback.
   `safe_area::insets()` is unchanged.
+- `platform::SafeAreaPlugin` keeps `SafeArea` current without the rest of
+  `PlatformPlugin`, which now adds it; it may be added more than once.
+  `safe_area::SafeAreaEmulation` substitutes stand-in insets for desktop
+  captures, `safe_area::RefreshSafeArea` names the refresh system set, and
+  `Insets::parse` reads `top,bottom,left,right`.
 - An opt-in `boot-shield` feature with `platform::boot_shield::BootShieldPlugin`:
   render-world systems that paint unwritten drawables for the first 8 frames
   and while pipelines compile, and dismiss the shield after 2 warm or 12
