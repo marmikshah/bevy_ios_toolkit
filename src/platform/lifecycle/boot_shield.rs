@@ -30,8 +30,12 @@
 //! an unwritten Metal drawable never shows. The second calls
 //! [`first_frame_presented`] after [`WARM_PRESENTS`] window presents with every
 //! pipeline ready, or after [`MAX_PRESENTS`] regardless. The game still calls
-//! [`show`] before building its app. [`BootShieldReady`] reports the dismissal
-//! to the main world.
+//! [`show`] (or [`show_color`]) before building its app. [`BootShieldReady`]
+//! reports the dismissal to the main world.
+//!
+//! Off iOS, `BootShieldPlugin` exists without the feature too: it only inserts
+//! a ready [`BootShieldReady`], so desktop builds and captures can share the
+//! app's plugin list and splash clock without enabling the renderer feature.
 //!
 //! ```no_run
 //! # #[cfg(feature = "boot-shield")] {
@@ -45,6 +49,13 @@
 //!     .run();
 //! # }
 //! ```
+
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+
+use bevy::prelude::*;
 
 /// Raise the boot shield: an opaque window in `(r, g, b)` (each `0.0..=1.0`)
 /// covering everything until [`first_frame_presented`] dismisses it. Call once
@@ -61,6 +72,13 @@ pub fn show(r: f32, g: f32, b: f32) {
 #[cfg(not(target_os = "ios"))]
 pub fn show(_r: f32, _g: f32, _b: f32) {}
 
+/// [`show`] in a Bevy `Color`, converted to sRGB; alpha is ignored. Pass the
+/// same colour as the game's `ClearColor` so the hand-off is seamless.
+pub fn show_color(color: Color) {
+    let color = color.to_srgba();
+    show(color.red, color.green, color.blue);
+}
+
 /// Dismiss the boot shield (a short fade), revealing the game's first real
 /// frame. Call once the renderer has presented — idempotent and a no-op if no
 /// shield is up.
@@ -75,13 +93,49 @@ pub fn first_frame_presented() {
 #[cfg(not(target_os = "ios"))]
 pub fn first_frame_presented() {}
 
+/// Whether the boot shield has dropped, shared by the main and render worlds.
+///
+/// Inserted by [`BootShieldPlugin`]. Starts `false` on iOS and `true`
+/// elsewhere, so a splash clock can wait for it on every platform.
+#[derive(Resource, Clone, Debug)]
+pub struct BootShieldReady(Arc<AtomicBool>);
+
+impl Default for BootShieldReady {
+    fn default() -> Self {
+        Self(Arc::new(AtomicBool::new(!cfg!(target_os = "ios"))))
+    }
+}
+
+impl BootShieldReady {
+    pub fn is_ready(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+
+    #[cfg_attr(not(feature = "boot-shield"), allow(dead_code))]
+    pub(crate) fn mark_ready(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+}
+
 #[cfg(feature = "boot-shield")]
-pub use plugin::{
-    BootShieldPlugin, BootShieldReady, LAUNCH_PAINT_FRAMES, MAX_PRESENTS, WARM_PRESENTS,
-};
+pub use plugin::{BootShieldPlugin, LAUNCH_PAINT_FRAMES, MAX_PRESENTS, WARM_PRESENTS};
 
 #[cfg(feature = "boot-shield")]
 mod plugin;
+
+/// The desktop stand-in for the `boot-shield` feature's plugin, so one app
+/// definition builds everywhere: off iOS there is no shield, and this only
+/// inserts a ready [`BootShieldReady`]. With the feature on, the real plugin
+/// takes its place and behaves the same off iOS.
+#[cfg(all(not(feature = "boot-shield"), not(target_os = "ios")))]
+pub struct BootShieldPlugin;
+
+#[cfg(all(not(feature = "boot-shield"), not(target_os = "ios")))]
+impl Plugin for BootShieldPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<BootShieldReady>();
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -91,6 +145,17 @@ mod tests {
     fn desktop_calls_are_noops() {
         // Off iOS the shield is inert — the flow stays callable on desktop.
         show(0.03, 0.04, 0.09);
+        show_color(Color::srgb(0.03, 0.04, 0.09));
         first_frame_presented();
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    #[test]
+    fn desktop_plugin_is_ready_at_once() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, BootShieldPlugin));
+        app.finish();
+        app.update();
+        assert!(app.world().resource::<BootShieldReady>().is_ready());
     }
 }

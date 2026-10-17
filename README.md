@@ -316,7 +316,10 @@ after real presents. On iOS its render-world systems paint each drawable with
 the shield after 2 window presents with every pipeline ready, or after 12.
 `BootShieldReady::is_ready()` reports the dismissal to the main world, for a
 splash clock; it is ready immediately off iOS. Keep calling `show` before
-building the app. The feature enables Bevy's renderer.
+building the app, or `show_color(color)` with the same Bevy `Color` as the
+`ClearColor`. The feature enables Bevy's renderer. Off iOS, with only the
+`platform` feature, `BootShieldPlugin` and `BootShieldReady` exist as a stand-in
+that is ready at once, so desktop builds keep the same plugin list.
 
 ### Offscreen capture (`capture`, desktop)
 
