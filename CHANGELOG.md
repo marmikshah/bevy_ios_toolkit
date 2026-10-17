@@ -32,6 +32,9 @@ Shared game helpers, consumed by Git revision. The crate version is unchanged.
   render-world systems that paint unwritten drawables for the first 8 frames
   and while pipelines compile, and dismiss the shield after 2 warm or 12
   window presents. `BootShieldReady` exposes the dismissal to the main world.
+- `boot_shield::show_color(Color)` raises the shield in a Bevy colour.
+  `BootShieldReady` now needs only `platform`, and off iOS without
+  `boot-shield` a stand-in `BootShieldPlugin` inserts it already ready.
 - A desktop-only `capture` feature: `capture::headless` for windowless
   rendering, `target_image` and `image_target` for an image camera target at a
   caller-chosen scale factor, and the `parse_size` / `parse_non_negative`

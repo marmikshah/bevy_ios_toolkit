@@ -1,11 +1,8 @@
 //! Render-world boot shield coordination; see the parent module docs.
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
-
 use bevy::prelude::*;
+
+use super::BootShieldReady;
 
 /// Launch frames painted before the pipeline cache can report what it is
 /// still waiting for.
@@ -14,29 +11,6 @@ pub const LAUNCH_PAINT_FRAMES: u32 = 8;
 pub const WARM_PRESENTS: u32 = 2;
 /// Window presents after which the shield drops even if pipelines still compile.
 pub const MAX_PRESENTS: u32 = 12;
-
-/// Whether the boot shield has dropped, shared by the main and render worlds.
-///
-/// Inserted by [`BootShieldPlugin`]. Starts `false` on iOS and `true`
-/// elsewhere, so a splash clock can wait for it on every platform.
-#[derive(Resource, Clone, Debug)]
-pub struct BootShieldReady(Arc<AtomicBool>);
-
-impl Default for BootShieldReady {
-    fn default() -> Self {
-        Self(Arc::new(AtomicBool::new(!cfg!(target_os = "ios"))))
-    }
-}
-
-impl BootShieldReady {
-    pub fn is_ready(&self) -> bool {
-        self.0.load(Ordering::Acquire)
-    }
-
-    fn mark_ready(&self) {
-        self.0.store(true, Ordering::Release);
-    }
-}
 
 /// Keeps the native shield up until the renderer has presented real frames.
 /// Add it with `DefaultPlugins`, in any order. Off iOS it only inserts a ready
@@ -224,7 +198,9 @@ mod tests {
 
     #[test]
     fn readiness_is_shared_between_clones() {
-        let ready = BootShieldReady(Arc::new(AtomicBool::new(false)));
+        let ready = BootShieldReady(std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
+            false,
+        )));
         let render = ready.clone();
         render.mark_ready();
         assert!(ready.is_ready());
