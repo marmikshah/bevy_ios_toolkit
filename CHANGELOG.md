@@ -17,6 +17,8 @@ Shared game helpers, consumed by Git revision. The crate version is unchanged.
   `<PREFIX>UMP_TEST_DEVICE_ID` in development builds into the existing
   `UmpTestConfig` and AdMob test device ids. `UmpQa::from_vars` takes the build
   environment and lookup explicitly.
+- `environment::dev_var(name)` and `environment::dev_flag(name)` read a launch
+  switch in development builds only; `dev_flag` accepts `1` or `true`.
 - `ads::PrivacyOptionsRequirement::is_required()`, true only for `Required`,
   for guarding the privacy-options action.
 - `platform::SafeArea`, a resource with the safe-area insets and window size,

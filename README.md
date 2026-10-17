@@ -283,6 +283,14 @@ ignored unless a geography is selected. Insert `qa.test` as the `UmpTestConfig`
 resource and call `qa.apply(&mut admob_config)` for the device id. Release
 device builds read no variables.
 
+### Development switches (always available)
+
+`environment::dev_var("MYGAME_WINDOW")` returns a variable only in debug and
+simulator builds (`AppEnvironment::current().is_development()`), and `None`
+when it is unset, empty or not Unicode. `environment::dev_flag("MYGAME_MUTE")`
+is true when that value is `1` or `true`, in any case and ignoring
+surrounding whitespace. Release device builds read no variables.
+
 ### Safe-area resource (`platform`)
 
 Read `Res<SafeArea>` for the four insets and window size in points instead of
