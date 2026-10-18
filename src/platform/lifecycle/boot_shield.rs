@@ -25,10 +25,10 @@
 //! compilation can run several updates before the first real present.
 //! [`BootShieldPlugin`] adds two render-world systems on iOS. The first paints
 //! each window's drawable with `ClearColor` for the first
-//! [`LAUNCH_PAINT_FRAMES`] frames and while any pipeline is still compiling, so
+//! `LAUNCH_PAINT_FRAMES` frames and while any pipeline is still compiling, so
 //! an unwritten Metal drawable never shows. The second calls
-//! [`first_frame_presented`] after [`WARM_PRESENTS`] window presents with every
-//! pipeline ready, or after [`MAX_PRESENTS`] regardless. The game still calls
+//! [`first_frame_presented`] after `WARM_PRESENTS` window presents with every
+//! pipeline ready, or after `MAX_PRESENTS` regardless. The game still calls
 //! [`show`] (or [`show_color`]) before building its app. [`BootShieldReady`]
 //! reports the dismissal to the main world.
 //!

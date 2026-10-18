@@ -136,7 +136,7 @@ Native work never calls back into Rust.
 ## Develop
 
 ```bash
-bin/check.sh                       # fmt, clippy -D warnings, tests: library and demo
+bin/check.sh                       # fmt, clippy -D warnings, docs, tests: library and demo
 bin/check.sh --help                # narrower scopes
 cargo run --example ads --features ads
 cargo run --manifest-path demo/Cargo.toml   # desktop demo with fakes
