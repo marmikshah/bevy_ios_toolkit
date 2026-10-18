@@ -4,9 +4,8 @@
 //! Between the launch screen and the first presented drawable, the
 //! uninitialized `CAMetalLayer` shows through (the classic magenta/black flash).
 //! [`show`] raises an opaque, launch-coloured window over the winit view at
-//! startup; [`first_frame_presented`] tears it down (fading) once the game has
-//! actually drawn a frame — so shells stop hand-rolling a frame-counter FFI to
-//! do the same thing.
+//! startup; [`first_frame_presented`] fades it out once the game has drawn a
+//! frame.
 //!
 //! ```no_run
 //! use bevy_ios_toolkit::platform::boot_shield;
@@ -33,9 +32,8 @@
 //! [`show`] (or [`show_color`]) before building its app. [`BootShieldReady`]
 //! reports the dismissal to the main world.
 //!
-//! Off iOS, `BootShieldPlugin` exists without the feature too: it only inserts
-//! a ready [`BootShieldReady`], so desktop builds and captures can share the
-//! app's plugin list and splash clock without enabling the renderer feature.
+//! Off iOS, `BootShieldPlugin` exists without the feature too and only inserts
+//! a ready [`BootShieldReady`], so one plugin list builds everywhere.
 //!
 //! ```no_run
 //! # #[cfg(feature = "boot-shield")] {
@@ -123,10 +121,8 @@ pub use plugin::{BootShieldPlugin, LAUNCH_PAINT_FRAMES, MAX_PRESENTS, WARM_PRESE
 #[cfg(feature = "boot-shield")]
 mod plugin;
 
-/// The desktop stand-in for the `boot-shield` feature's plugin, so one app
-/// definition builds everywhere: off iOS there is no shield, and this only
-/// inserts a ready [`BootShieldReady`]. With the feature on, the real plugin
-/// takes its place and behaves the same off iOS.
+/// The desktop stand-in for the `boot-shield` feature's plugin: it only inserts
+/// a ready [`BootShieldReady`].
 #[cfg(all(not(feature = "boot-shield"), not(target_os = "ios")))]
 pub struct BootShieldPlugin;
 

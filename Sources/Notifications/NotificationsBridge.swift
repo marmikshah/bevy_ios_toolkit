@@ -1,31 +1,14 @@
-// Local user notifications bridge for bevy_ios_toolkit (feature "notifications").
+// Local user notifications bridge for bevy_ios_toolkit (feature "notifications";
+// see the crate's native contract). Local only: no APNs, no Info.plist key.
 //
-// Design contract with the Rust side (the bevy_ios_toolkit notifications module):
-//   - Every entry point is @_cdecl C-ABI, called FROM Rust.
-//   - UNUserNotificationCenter's async work surfaces as CACHED STATE and a
-//     POLLED EVENT QUEUE drained once per frame, never as callbacks into Rust —
-//     re-entrancy against winit's event loop is not safe. This mirrors
-//     AdMobBridge.swift and StoreKitBridge.swift.
-//   - notifications_status never blocks. It answers from cache and kicks off a
-//     refresh. Asking the system synchronously would mean parking a Bevy worker
-//     thread on the main thread, which deadlocks with no crash and no log.
-//   - notifications_drain_events returns a pointer to a buffer owned here, valid
-//     only until the next drain; Rust copies immediately.
-//   - This file must COMPILE AND LINK where the framework is unavailable:
-//     everything UserNotifications-specific sits behind
-//     #if canImport(UserNotifications), with linking stubs otherwise.
+// notifications_status never blocks: it answers from cache and kicks off a
+// refresh. Asking the system synchronously would park a Bevy worker thread on
+// the main thread, which deadlocks with no crash and no log.
+// notifications_drain_events returns a buffer owned here, valid only until the
+// next drain; Rust copies immediately.
 //
-// LOCAL ONLY. No APNs, no device token, no server, and nothing here that counts
-// as data collection on a privacy manifest. No Info.plist key is required.
-//
-// Integration (per game):
-//   1. Link this package's `Notifications` product from your app target.
-//   2. NotificationsPlugin installs the delegate during app construction,
-//      before winit enters UIApplicationMain. Consumers need no Swift bootstrap.
-//
-// Shared state (the event queue + cached authorization) lives behind an
-// OSAllocatedUnfairLock so async system callbacks and the synchronous C-ABI
-// getters stay race-free and Swift-6 clean.
+// Shared state lives behind an OSAllocatedUnfairLock so system callbacks and
+// the synchronous C-ABI getters stay race-free.
 
 import Foundation
 import os

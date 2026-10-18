@@ -5,10 +5,8 @@
 //! [`ScheduleNotification`], and find out the app was opened from one by
 //! reading [`NotificationOpened`].
 //!
-//! **Local only.** There is no remote push here: no APNs, no device token, no
-//! server, and nothing that counts as data collection on a privacy manifest.
-//! Everything is scheduled by the app, on the device, for a time the app
-//! already knows about.
+//! **Local only:** no APNs, device token or server, and nothing that counts as
+//! data collection on a privacy manifest.
 //!
 //! ```no_run
 //! use std::time::Duration;
@@ -53,10 +51,8 @@
 //!
 //! # Ids are yours, and they replace
 //!
-//! Scheduling an id that is already pending **replaces** it. That is the point
-//! of caller-owned ids: a timer that slips should never leave two
-//! notifications queued. It also means rescheduling is idempotent, so a system
-//! that runs every frame does no harm.
+//! Scheduling an id that is already pending **replaces** it, so rescheduling
+//! every frame is idempotent and never queues two.
 //!
 //! # Catching a cold launch
 //!
@@ -64,18 +60,12 @@
 //! while the app is built, before winit starts, so an open that *launched* the
 //! app is buffered and delivered on the first update.
 //!
-//! # This is for a real event
-//!
-//! The same warning [`crate::review::request`] carries. A notification API
-//! makes the daily-nag pattern very easy to build. Send one because something
-//! the player asked to know about actually happened — never to drag them back.
-//! Restraint is the consumer's job, which is exactly what the desktop fake
-//! exists to let you test.
+//! Send one because something the player asked to know about happened, not to
+//! drag them back.
 //!
 //! # Desktop fake (non-iOS)
 //!
-//! Nothing is ever delivered off iOS; what is modelled is the policy around it.
-//! Starts `Checking`; a request resolves it.
+//! Nothing is delivered off iOS. Starts `Checking`; a request resolves it.
 //!
 //! | variable | effect |
 //! |---|---|
@@ -160,11 +150,9 @@ impl NotificationPermission {
 
 /// What this app has asked for since it launched and has not cancelled.
 ///
-/// A record of *requests*, not the system's queue: one that has already been
-/// delivered, one the player cleared, and anything scheduled before this
-/// launch are all absent. It is here so a consumer can answer "have I already
-/// asked for tonight's one?" without a round trip, and so scheduling policy is
-/// testable off a device. When the two could disagree, believe the system.
+/// A record of *requests*, not the system's queue: delivered, cleared and
+/// earlier-launch notifications are absent. When the two disagree, believe the
+/// system.
 #[derive(Resource, Clone, Debug, Default)]
 pub struct PendingNotifications(Vec<String>);
 
@@ -198,8 +186,7 @@ pub struct ScheduleNotification {
     pub id: String,
     pub title: String,
     pub body: String,
-    /// How long from now. Must be greater than zero — the system has no way
-    /// to schedule something for a moment that has already passed.
+    /// How long from now. Must be greater than zero.
     pub after: Duration,
 }
 

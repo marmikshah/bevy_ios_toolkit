@@ -1,17 +1,11 @@
 //! The device's safe-area insets (notch / Dynamic Island, home indicator,
 //! rounded corners), in points.
 //!
-//! Returns the raw insets, or `0.0` when unavailable (off-iOS, or before the key
-//! window exists). The caller owns the fallback policy — a layout typically
-//! clamps to a notch-class constant when an inset reports `0.0` and adds its own
-//! breathing-room margin.
+//! Insets are `0.0` when unavailable (off iOS, or before the key window exists);
+//! the fallback policy is the caller's.
 //!
-//! Each [`insets`] call queues main-thread refreshes on iOS. Systems should read
-//! the [`SafeArea`] resource instead: [`SafeAreaPlugin`] (added by
-//! [`PlatformPlugin`](super::PlatformPlugin)) refreshes it in `PreUpdate`,
-//! quickly after window, focus and lifecycle changes and then every two
-//! seconds. Desktop and capture apps can add [`SafeAreaPlugin`] alone, and
-//! insert [`SafeAreaEmulation`] to lay out as if the device had insets.
+//! Each [`insets`] call queues main-thread refreshes on iOS, so systems should
+//! read the [`SafeArea`] resource instead.
 //!
 //! ```no_run
 //! use bevy::prelude::*;
@@ -30,18 +24,12 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::{AppLifecycle, WindowCreated, WindowFocused, WindowResized};
 
-/// The four safe-area insets, in points. A portrait game usually needs only
-/// [`top`](Self::top); landscape games and bottom-anchored HUD/toasts want all
-/// four (home indicator, rounded corners).
+/// The four safe-area insets, in points.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Insets {
-    /// Notch / Dynamic Island edge.
     pub top: f32,
-    /// Home-indicator edge.
     pub bottom: f32,
-    /// Left rounded-corner / sensor edge (landscape).
     pub left: f32,
-    /// Right rounded-corner / sensor edge (landscape).
     pub right: f32,
 }
 
@@ -153,11 +141,9 @@ const RETRY_INTERVAL: Duration = Duration::from_millis(250);
 const IDLE_INTERVAL: Duration = Duration::from_secs(2);
 const RETRIES: u8 = 12;
 
-/// Polls quickly for a short settling window after events that can change
-/// UIKit's key window or geometry, then falls back to a coarse safety poll.
-/// Startup retries matter: the first Bevy update can precede installation of
-/// the key UIWindow. The safety poll catches UIKit-only inset changes that do
-/// not produce a Bevy window event.
+/// Polls quickly after events that can change UIKit's geometry (the first
+/// update can precede the key UIWindow), then slowly for UIKit-only inset
+/// changes that produce no Bevy window event.
 #[derive(Resource, Debug)]
 pub(crate) struct SafeAreaPolling {
     next_poll: Duration,
@@ -175,9 +161,7 @@ impl Default for SafeAreaPolling {
 
 impl SafeAreaPolling {
     fn request(&mut self, now: Duration) {
-        // An idle poll may be seconds away, so lifecycle/window changes get an
-        // immediate read. Repeated resize events during the settling burst do
-        // not defeat its rate limit.
+        // Read now unless a settling burst is already running.
         if self.remaining == 0 {
             self.next_poll = now;
         }

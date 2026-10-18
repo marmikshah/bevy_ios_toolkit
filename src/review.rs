@@ -2,7 +2,7 @@
 //!
 //! Fire-and-forget: iOS decides whether to actually show the prompt (it is
 //! heavily rate-limited — at most a few times a year, never guaranteed). Call
-//! [`request`] at a genuine moment of delight; never gate anything on it.
+//! [`request`] after a win or other good moment; never gate anything on it.
 //!
 //! ```no_run
 //! use bevy_ios_toolkit::review;

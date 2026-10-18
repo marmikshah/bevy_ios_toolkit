@@ -1,7 +1,5 @@
-//! iOS backend: the raw C-ABI surface implemented by `AdMobBridge.swift`.
-//! All async, delegate-driven AdMob work happens Swift-side; Rust only issues
-//! commands and drains cached events (no callbacks into Rust — winit
-//! re-entrancy is unsafe).
+//! iOS backend: the raw C-ABI surface implemented by `AdMobBridge.swift`
+//! (see the crate's native contract).
 //!
 //! The string returned by `admob_drain_events` points at a Swift-owned buffer
 //! valid only until the next call that regenerates it; the safe wrapper in

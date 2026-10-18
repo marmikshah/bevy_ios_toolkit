@@ -1,7 +1,4 @@
 // First-frame boot-shield shim for bevy_ios_toolkit's `platform` feature.
-//
-// @_cdecl C-ABI called FROM Rust; no callbacks. Behind #if canImport(UIKit)
-// with linking stubs otherwise. Symbol prefix `platform_`.
 
 import Foundation
 

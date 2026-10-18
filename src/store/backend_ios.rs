@@ -1,6 +1,5 @@
-//! iOS backend: the raw C-ABI surface implemented by `StoreKitBridge.swift`.
-//! All async StoreKit work happens Swift-side; Rust only issues commands and
-//! polls cached state (no callbacks into Rust — winit re-entrancy is unsafe).
+//! iOS backend: the raw C-ABI surface implemented by `StoreKitBridge.swift`
+//! (see the crate's native contract).
 //!
 //! String getters transfer ownership of an independent allocation to Rust.
 //! The safe wrappers in `super` copy it and call `store_string_free`.

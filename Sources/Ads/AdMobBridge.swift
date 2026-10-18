@@ -1,33 +1,13 @@
-// Google AdMob bridge for bevy_ios_toolkit.
+// Google AdMob bridge for bevy_ios_toolkit (see the crate's native contract).
 //
-// Design contract with the Rust side (the bevy_ios_toolkit ads module):
-//   - Every entry point is @_cdecl C-ABI, called FROM Rust.
-//   - AdMob's async, delegate-driven work runs in Tasks on the main actor;
-//     results surface as a POLLED EVENT QUEUE drained once per frame, never as
-//     callbacks into Rust — re-entrancy against winit's event loop is not safe.
-//     This mirrors the StoreKitBridge.swift pattern.
-//   - admob_drain_events returns a pointer to a buffer owned here, valid only
-//     until the next drain; Rust copies immediately.
-//   - This file must COMPILE AND LINK even where the SDK is unavailable:
-//     everything GoogleMobileAds-specific sits behind
-//     #if canImport(GoogleMobileAds), with linking stubs otherwise.
+// admob_drain_events returns a buffer owned here, valid only until the next
+// drain; Rust copies immediately. Apps must set `GADApplicationIdentifier` in
+// Info.plist (bevy_ios_toolkit::ads::TEST_APP_ID while developing) and add
+// Google's `SKAdNetworkItems`.
 //
-// Integration (per game):
-//   1. Link this package's `Ads` product from your app target; it pulls in the
-//      Google Mobile Ads SDK (v12.x) and the UMP consent SDK transitively — the
-//      "no GAD/UMP prefix" API.
-//   2. Set `GADApplicationIdentifier` in Info.plist to your AdMob app id (use
-//      bevy_ios_toolkit::ads::TEST_APP_ID while developing), and add the
-//      `SKAdNetworkItems` Google ships for attribution.
-//   3. Insert AdmobConfig with your ad unit ids. Symbol prefix `admob_` won't
-//      collide with the game's own bridge.
-//   4. Keep a visible privacy-options action whenever the polled requirement
-//      status is 1, and present the form directly from the user's interaction.
-//
-// All shared state (the event queue + cached consent status) lives behind an
-// OSAllocatedUnfairLock so the async SDK callbacks and the synchronous C-ABI
-// getters stay race-free and Swift-6 clean. Ad objects themselves are touched
-// only on the main actor.
+// Shared state lives behind an OSAllocatedUnfairLock so SDK callbacks and the
+// synchronous C-ABI getters stay race-free. Ad objects are touched only on the
+// main actor.
 
 import Foundation
 import os

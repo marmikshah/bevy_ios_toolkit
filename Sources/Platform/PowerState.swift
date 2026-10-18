@@ -1,9 +1,6 @@
 // Power-signal shim for bevy_ios_toolkit's `platform` feature.
 //
-// @_cdecl C-ABI called FROM Rust; polled getters (no callbacks). Behind
-// #if canImport(UIKit) with linking stubs otherwise. Symbol prefix `platform_`.
-//
-// `AtomicInt` is declared in SafeArea.swift — same target, same purpose.
+// `AtomicInt` is declared in SafeArea.swift.
 
 import Foundation
 

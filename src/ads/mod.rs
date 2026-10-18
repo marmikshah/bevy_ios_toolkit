@@ -73,8 +73,6 @@ mod backend;
 #[path = "backend_fake.rs"]
 mod backend;
 
-// ---------- Test ad units ----------
-
 /// Google's official iOS **test** app id (set as `GADApplicationIdentifier` in
 /// `Info.plist` while developing). Real ad ids only serve in production.
 pub const TEST_APP_ID: &str = "ca-app-pub-3940256099942544~1458002511";
@@ -91,8 +89,6 @@ pub fn test_unit_id(format: AdFormat) -> &'static str {
         AdFormat::AppOpen => "ca-app-pub-3940256099942544/5575463023",
     }
 }
-
-// ---------- Types ----------
 
 /// An AdMob ad format. The discriminants are the stable wire values shared with
 /// the Swift bridge; do not reorder.
@@ -276,8 +272,6 @@ impl UmpDebugGeography {
     }
 }
 
-// ---------- Resources ----------
-
 /// Who requests ATT when ads are configured. Both modes keep ad startup
 /// blocked until ATT is authorized, denied or restricted.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -420,8 +414,6 @@ pub struct AdmobState {
     pub banner_height: f32,
 }
 
-// ---------- Messages (in) ----------
-
 /// Preload a full-screen ad of `format` after
 /// [`AdmobState::can_request_ads`] is true. No-op for [`AdFormat::Banner`]
 /// (use [`ShowBanner`]).
@@ -462,8 +454,6 @@ pub struct RequestConsent;
 /// ([`PrivacyOptionsRequirement::is_required`]).
 #[derive(Message, Clone, Debug)]
 pub struct PresentPrivacyOptions;
-
-// ---------- Messages (out) ----------
 
 /// A load completed and a creative is ready to present.
 #[derive(Message, Clone, Debug)]
@@ -510,15 +500,12 @@ pub struct ConsentUpdated(pub ConsentStatus);
 
 /// The latest UMP consent-info update failed.
 ///
-/// Read [`AdmobState::can_request_ads`] after this message: cached consent from
-/// a previous session may still permit ads. The toolkit retries failed startup
-/// verification up to three times; an explicit [`RequestConsent`] can retry later.
+/// Cached consent may still permit ads, so read
+/// [`AdmobState::can_request_ads`]. [`RequestConsent`] retries.
 #[derive(Message, Clone, Debug)]
 pub struct ConsentInfoUpdateFailed {
     pub error: String,
 }
-
-// ---------- Wire event (bridge -> Rust) ----------
 
 /// One event drained from the backend's queue. Mirrors the JSON the Swift shim
 /// (and the fake) emit; field names are the wire contract.
@@ -533,8 +520,6 @@ pub(crate) struct AdEvent {
     #[serde(default)]
     pub reward_type: String,
 }
-
-// ---------- Safe backend wrappers ----------
 
 fn init(config: &AdmobConfig, ump_test: UmpTestConfig) {
     let Ok(joined) = CString::new(config.test_device_ids.join(",")) else {
@@ -599,8 +584,6 @@ fn drain_events() -> Vec<AdEvent> {
     let json = unsafe { read_cstr(backend::admob_drain_events()) };
     serde_json::from_str(&json).unwrap_or_default()
 }
-
-// ---------- Plugin ----------
 
 #[derive(Resource, Default)]
 struct AdsPoll {

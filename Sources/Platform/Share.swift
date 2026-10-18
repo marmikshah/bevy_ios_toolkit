@@ -1,8 +1,4 @@
 // Share-sheet shim for bevy_ios_toolkit's `platform` feature.
-//
-// @_cdecl C-ABI called FROM Rust; fire-and-forget (no callbacks, no polled
-// result). Behind #if canImport(UIKit) with a linking stub otherwise. Symbol
-// prefix `platform_`.
 
 import Foundation
 

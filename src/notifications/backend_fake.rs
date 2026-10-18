@@ -1,12 +1,9 @@
 //! Non-iOS backend: a deterministic in-memory fake, so scheduling *policy* is
 //! exercisable on desktop without a device.
 //!
-//! Nothing is ever delivered here. A fake that popped a real desktop
-//! notification would be inventing a platform capability to make native state
-//! runnable, which this repository's rules refuse. What it does model is
-//! everything a consumer's own code has to get right: whether permission was
-//! granted, whether a schedule was accepted, that an id replaces rather than
-//! stacks, and what happens when the app is opened from a notification.
+//! Nothing is ever delivered here. It models what a consumer's code has to get
+//! right: permission, accepted schedules, ids that replace rather than stack,
+//! and opens from a notification.
 //!
 //! Tunable through the environment — see the module docs.
 
