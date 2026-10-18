@@ -1,8 +1,4 @@
 // Haptics shim for bevy_ios_toolkit's `platform` feature.
-//
-// @_cdecl C-ABI called FROM Rust; no callbacks back. Behind #if canImport(UIKit)
-// with a linking stub otherwise, so the staticlib links on any target. Symbol
-// prefix `platform_`.
 
 import Foundation
 

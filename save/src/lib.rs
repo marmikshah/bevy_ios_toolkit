@@ -2,10 +2,8 @@
 //!
 //! A failed read disables writes for this file and every clone until a later
 //! explicit load succeeds. Returning defaults cannot authorize an autosave over
-//! unreadable progress. Contents the codec rejects are reset.
-//! [`SaveFile::keep_rejected`] opts in to setting the rejected file aside
-//! first (at [`rejected_path`]), so a codec or content change that rejects
-//! real progress never destroys it.
+//! unreadable progress. Contents the codec rejects are reset;
+//! [`SaveFile::keep_rejected`] sets them aside first.
 //!
 //! The crate moves opaque bytes: the game's codec owns the format. Writes are
 //! atomic: bytes go to `<save>.tmp`, are synced, then renamed over the save.
@@ -87,7 +85,7 @@ impl SaveFile {
     }
 
     /// Only this explicit load can reopen writes after a read failure. The
-    /// codec owns schema and semantic validation; no legacy fallback is used.
+    /// codec owns schema and semantic validation.
     pub fn load<T: Default>(
         &self,
         decode: impl Fn(&[u8]) -> Option<T>,

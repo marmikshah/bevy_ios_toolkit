@@ -1,12 +1,6 @@
-//! Own the app's audio session so nothing else — a full-screen video ad
-//! reconfiguring it, or the OS default — can leave the game muted. iOS routes
-//! through the C-ABI shim; other platforms no-op.
-//!
-//! Call [`configure`] once at startup on any app that turns on ads: the ad SDK
-//! reconfigures the shared session when a video creative plays and can leave it
-//! deactivated on dismiss, silencing the game's own audio. Owning the session
-//! (and re-asserting it on every foreground return, which the shim does) keeps
-//! the mix alive across ads.
+//! Own the app's audio session. Call [`configure`] once at startup on any app
+//! with ads: the ad SDK reconfigures the shared session for video creatives and
+//! can leave it deactivated on dismiss, muting the game. No-op off iOS.
 
 /// Claim the app's audio session, re-asserted on every foreground return.
 ///

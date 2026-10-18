@@ -1,15 +1,9 @@
 //! The device's power signals — thermal pressure and Low Power Mode — as a
 //! polled Bevy resource plus a change message.
 //!
-//! Apple's recommended adaptive-quality pattern: when the device reports
-//! [`ThermalState::Serious`] the system is already throttling, so a game should
-//! shed work (cap the frame rate, cheapen post-processing) rather than be
-//! throttled into a stutter. Low Power Mode is the user asking for the same
-//! thing explicitly.
-//!
-//! Read [`PowerState`] for the current values, or react once per transition with
-//! [`PowerStateChanged`] — the resource is polled every frame but the message is
-//! only written when something actually moves.
+//! At [`ThermalState::Serious`] the system is already throttling, so shed work
+//! rather than stutter; Low Power Mode asks for the same. Read [`PowerState`],
+//! or react once per transition with [`PowerStateChanged`].
 //!
 //! ```no_run
 //! use bevy::prelude::*;

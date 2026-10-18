@@ -2,16 +2,8 @@
 //! image the tool allocates, with no OS window, for store screenshots and
 //! recordings at any resolution.
 //!
-//! - [`headless`] adjusts a plugin group: synchronous pipeline compilation, no
-//!   `WinitPlugin`, no pipelined rendering, so readback and frame advancement
-//!   share one app update.
-//! - [`target_image`] and [`image_target`] build the camera's image target, and
-//!   [`attach_image_target`] allocates one and points a camera at it. The
-//!   scale factor stays the game's choice; these helpers change no pixels.
-//! - [`window_resolution`] sizes the logical window to match a pixel density.
-//! - [`fixed_clock`] advances time by exactly one frame per update and drives
-//!   the windowless app, so captures are repeatable.
-//! - [`parse_size`] and [`parse_non_negative`] parse capture arguments.
+//! [`headless`] adjusts the plugin group, [`attach_image_target`] points a
+//! camera at a new image, and [`fixed_clock`] makes frame timing repeatable.
 //!
 //! ```no_run
 //! use bevy::prelude::*;
@@ -24,7 +16,7 @@
 //!     .world_mut()
 //!     .resource_mut::<Assets<Image>>()
 //!     .add(capture::target_image(width, height));
-//! // The game's own scale factor; add `IsDefaultUiCamera` when it draws the UI.
+//! // The game's own scale factor.
 //! app.world_mut()
 //!     .spawn((Camera2d, capture::image_target(image, 1.0)));
 //! ```
@@ -88,8 +80,6 @@ pub fn image_target(handle: Handle<Image>, scale_factor: f32) -> RenderTarget {
 /// `camera` at it with [`image_target`] at `scale_factor`. Returns the image,
 /// for reading the capture back.
 ///
-/// Mark the camera `IsDefaultUiCamera` as well when it should draw the UI.
-///
 /// ```no_run
 /// use bevy::prelude::*;
 /// use bevy_ios_toolkit::capture;
@@ -144,12 +134,9 @@ pub fn window_resolution(width: u32, height: u32, scale_factor: f32) -> WindowRe
 /// wall clock does, and return that frame length. An `fps` of zero is treated
 /// as one.
 ///
-/// It inserts `TimeUpdateStrategy::ManualDuration` and raises
-/// `Time<Virtual>`'s maximum delta to at least one frame, so low rates are not
-/// clamped. Without `WinitPlugin` nothing drives the app, so it also adds
-/// `ScheduleRunnerPlugin::run_loop` at the same period unless a runner is
-/// already present; add your own first to pace the loop differently. Call it
-/// before or after adding `DefaultPlugins`.
+/// Raises `Time<Virtual>`'s maximum delta so low rates are not clamped, and
+/// adds `ScheduleRunnerPlugin::run_loop` at the same period unless a runner is
+/// already present (nothing drives the app without `WinitPlugin`).
 pub fn fixed_clock(app: &mut App, fps: u32) -> Duration {
     let frame = Duration::from_secs_f64(1.0 / f64::from(fps.max(1)));
     app.insert_resource(TimeUpdateStrategy::ManualDuration(frame));

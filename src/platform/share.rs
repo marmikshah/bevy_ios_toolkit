@@ -1,11 +1,6 @@
-//! Present the system share sheet (`UIActivityViewController`) with a block of
-//! text — the organic-virality primitive: a player taps "share" on a result card
-//! and the OS owns the rest.
+//! Present the system share sheet (`UIActivityViewController`) with text.
 //!
-//! Fire-and-forget, like every other `platform` function: iOS routes through the
-//! C-ABI shim, other platforms log the payload so the flow is traceable on a
-//! desktop run. Nothing is reported back — which activity the user picked, or
-//! whether they cancelled, is not observable here.
+//! Fire-and-forget: nothing is reported back. Off iOS the payload is printed.
 //!
 //! ```no_run
 //! use bevy_ios_toolkit::platform::share;
@@ -25,10 +20,8 @@ pub fn text(text: &str) {
     }
 }
 
-/// Desktop fake: print what would be shared. There is no cross-platform share
-/// sheet worth emulating and nothing observes the outcome, so the payload on
-/// stderr is the whole observable effect. Goes direct rather than through a log
-/// facade because the crate depends on bevy with no default features.
+/// Desktop fake: print what would be shared (stderr, since the crate has no log
+/// facade without Bevy's default features).
 #[cfg(not(target_os = "ios"))]
 pub fn text(text: &str) {
     eprintln!("[bevy_ios_toolkit fake share] {text}");

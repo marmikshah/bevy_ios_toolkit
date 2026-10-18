@@ -1,9 +1,5 @@
-//! iOS backend: raw `extern "C"` declarations resolved by the `Notifications`
-//! Swift product's `@_cdecl` shims.
-//!
-//! Same contract as every other native module: Rust calls in, results come
-//! back as polled state or a drained event queue — never callbacks into Rust,
-//! because re-entrancy against winit's event loop is not safe.
+//! iOS backend: the raw C-ABI surface implemented by the `Notifications`
+//! Swift product (see the crate's native contract).
 //!
 //! The string returned by `notifications_drain_events` points at a
 //! Swift-owned buffer valid only until the next call, so callers copy it

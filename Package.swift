@@ -1,16 +1,9 @@
 // swift-tools-version:5.9
 import PackageDescription
 
-// The Swift half of the bevy_ios_toolkit FFI contract. Each product mirrors a
-// cargo feature of the Rust crate and ships the `@_cdecl` shims that the crate's
-// `extern "C"` symbols resolve against at link time. Both halves are co-versioned
-// through this repo's git tags — one tag publishes the crate to crates.io and
-// pins the shims a consumer pulls over SPM, which is what keeps them in lockstep.
-//
-// A consumer adds this repo as an SPM dependency and links ONLY the products it
-// ships (a game with no ads never compiles the ad code). Per-app configuration
-// — `Info.plist` keys, the Game Center entitlement, ad-unit ids — stays in the
-// app; the shims carry none of it.
+// The Swift half of bevy_ios_toolkit: one product per cargo feature, holding
+// the `@_cdecl` shims its `extern "C"` symbols link against. Pin it to the same
+// Git tag as the crate, and link only the products you ship.
 let package = Package(
     name: "BevyIosToolkit",
     platforms: [.iOS("26.0")],

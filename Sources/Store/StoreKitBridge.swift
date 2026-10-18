@@ -1,18 +1,7 @@
-// StoreKit 2 bridge for bevy_ios_toolkit.
+// StoreKit 2 bridge for bevy_ios_toolkit (see the crate's native contract).
 //
-// Design contract with the Rust side (the bevy_ios_toolkit StoreKit module):
-//   - Every entry point is @_cdecl C-ABI, called FROM Rust.
-//   - StoreKit's async work runs in Tasks; results surface as POLLED state
-//     (Int32 / owned C-string snapshots), never callbacks into Rust.
-//   - Every returned string is an independent allocation. Rust releases it
-//     through `store_string_free`, so async work cannot invalidate a read.
-//   - This file must COMPILE AND LINK even where StoreKit is unavailable:
-//     everything StoreKit-specific sits behind #if canImport(StoreKit), with
-//     linking stubs otherwise.
-//
-// Integration: link this package's `Store` product from your app target; it
-// links StoreKit and UIKit (for foreground reconciliation) for you.
-// Symbol prefix `store_` avoids collision with the game's own bridge.
+// Every returned string is an independent allocation. Rust releases it through
+// `store_string_free`, so async work cannot invalidate a read.
 
 import Foundation
 import os

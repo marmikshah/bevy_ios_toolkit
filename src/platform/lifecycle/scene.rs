@@ -6,11 +6,7 @@
 //! orphaned `WinitUIWindow` instances when they become visible; it does not
 //! replace the app delegate or re-post lifecycle notifications.
 //!
-//! The workaround replaces `UIWindow.makeKeyAndVisible` once at registration,
-//! and calls through for every window. It retains weak references to windows
-//! shown before the first scene connection. Scene-aware windows
-//! and other window classes retain their normal behavior. Remove this bridge
-//! once the supported winit version adopts scenes upstream.
+//! Remove this bridge once the supported winit version adopts scenes upstream.
 
 /// Retain/register the toolkit scene delegate before UIKit resolves the class
 /// name in `Info.plist`. [`PlatformPlugin`](crate::platform::PlatformPlugin)
