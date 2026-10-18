@@ -4,8 +4,7 @@
 Package.resolved
 .swiftpm/
 
-# Mandatory repository ignores
-# Secrets and agent-local state never belong in a repository.
+# Secrets and local agent settings.
 .claude/settings.local.json
 .env
 .env.*
