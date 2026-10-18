@@ -7,9 +7,8 @@ description = "Native iOS integrations for Bevy as ECS resources and messages: S
 repository = "https://github.com/marmikshah/bevy_ios_toolkit"
 keywords = ["bevy", "ios", "storekit", "admob", "gamekit"]
 categories = ["game-development", "api-bindings"]
-# The demo app (its own crate, with iOS Xcode shell + full-Bevy deps) is not part
-# of the published library.
-exclude = ["demo"]
+# Rust sources only: the Swift half ships through SPM from this repository.
+include = ["src/**", "examples/**", "README.md", "CHANGELOG.md", "LICENSE"]
 
 [workspace]
 # The root package is a member implicitly; listing "." would also claim the
