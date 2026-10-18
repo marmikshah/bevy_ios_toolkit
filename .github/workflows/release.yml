@@ -7,14 +7,21 @@ on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: read
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-08
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3 # v2
       # Guard: the tag must match the crate version (v1.2.3 == version = "1.2.3").
       - name: Verify tag matches Cargo.toml version
         run: |
@@ -25,6 +32,6 @@ jobs:
             exit 1
           fi
       - name: Publish to crates.io
-        run: cargo publish
+        run: cargo publish --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_API_TOKEN }}

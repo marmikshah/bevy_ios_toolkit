@@ -4,7 +4,7 @@ set -euo pipefail
 if [[ "${1:-}" == --help || $# -ne 1 ]]; then
     echo "Usage: tests/ios/run.sh BOOTED_SIMULATOR_UDID"
     echo "Requires Xcode; run on iOS 26.0 and iOS 27 to check compatibility."
-    exit 0
+    [[ "${1:-}" == --help ]] && exit 0 || exit 2
 fi
 cd "$(dirname "$0")/../.."
 output="$PWD/target/ios-tests-$1"
