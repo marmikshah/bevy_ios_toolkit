@@ -1,6 +1,6 @@
 use bevy::prelude::Resource;
 
-use crate::store_state::{ProductsState, StoreProducts};
+use crate::store::state::{ProductsState, StoreProducts};
 
 /// The one StoreKit operation currently in flight.
 ///
@@ -57,7 +57,7 @@ pub(crate) fn begin_catalog_reload(products: &mut StoreProducts, activity: &Stor
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store_state::ProductInfo;
+    use crate::store::state::ProductInfo;
 
     #[test]
     fn retry_clears_stale_prices_and_preserves_an_active_store_operation() {
