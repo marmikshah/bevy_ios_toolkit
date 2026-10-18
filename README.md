@@ -20,57 +20,15 @@ ECS resources and messages. One crate, one plugin, a **feature per integration**
 > needs a real device, the relevant Apple/Google setup, and the matching Swift
 > shim linked from the companion SPM package — see "iOS integration".
 
-## How it works
+How each integration behaves (timing, retries, fakes, invariants) is documented
+on its module at [docs.rs](https://docs.rs/bevy_ios_toolkit). The crate-level
+page explains the native contract every module shares.
 
-Every module shares one native contract:
+## Install
 
-- Each native entry point is `@_cdecl` C-ABI, called **from Rust**.
-- The SDKs' async, delegate-driven work surfaces as **polled state** (or a
-  drained event queue) read once per frame — *never* callbacks into Rust,
-  because re-entrancy against winit's event loop is not safe.
-- Each Swift shim (an SPM product, see "iOS integration") sits behind
-  `#if canImport(...)` with linking stubs, so the staticlib links on any target.
-
-Off iOS, integrations keep a stateful fake only when there is a meaningful
-cross-platform flow to exercise. StoreKit is different: purchases belong to the
-platform store. Store types are portable for game policy tests; the native
-StorePlugin exists only on iOS. There is no desktop purchase backend.
-
-## Default iOS game structure
-
-Enable `game` and compose `IosGamePlugin(IosGameConfig::new(product_ids, ads))`
-before running Bevy. Link the matching Swift package's Platform, Store, Ads and
-Notifications products. Games supply product IDs, ad placements, shop UI,
-benefits and reminder content; toolkit owns SDK state and permission timing.
-
-The profile loads the catalogue and verified entitlements quietly. At launch it
-resolves ATT, refreshes UMP consent, presents only a required form, then requests
-notification permission only after OS settings report an unanswered choice.
-Denied and approved choices are remembered by their providers. Native sheets
-share one asynchronous presentation owner. Pending SDK work never gates game
-input, simulation or rendering. Put policy systems in `IosSystems::Intents` when
-they need to read this frame's native snapshot before dispatch.
-
-Use `ReloadStoreRequest` for a quiet failed catalogue/entitlement retry and
-`RestoreRequest` for the player's explicit Restore action. Banners reserve space
-only after a creative mounts; `TryShowAd` skips unavailable full-screen ads.
-Debug and simulator builds use development services. Physical release builds,
-including TestFlight, use production regardless of StoreKit's sandbox receipt.
-The explicit `capture()` / `capture_store()` profiles are ignored on production
-devices.
-
-Keep deterministic rules in a headless engine crate, and rendering, controls and
-placement policy in the game crate. Keep platform-independent persistence in
-the engine, separate from the simulation and native services; `game_save` (see
-"Shared game helpers") provides the file handling.
-Pin this library's Rust and Swift halves to the same Git revision.
-
-## Features are opt-in for a reason
-
-No feature is enabled by default. A module's `extern "C"` block only exists when
-its feature is on, and the matching SPM product must be linked into your app — so
-enabling a feature you haven't wired natively fails loudly at link time instead
-of misbehaving at runtime.
+No feature is on by default. A module's `extern "C"` block exists only when its
+feature is on, and the matching SPM product must be linked into the app, so a
+feature you haven't wired natively fails at link time rather than at runtime.
 
 ```toml
 [dependencies]
@@ -101,29 +59,21 @@ fn show(mut shows: MessageWriter<TryShowAd>) {
 }
 ```
 
-Use real production ad unit IDs; toolkit selects Google's sample IDs for debug
-and simulator builds. Use `AdmobState::can_request_ads` for ad readiness and
-verified `Entitlements` for ownership. Neither is a gameplay readiness gate.
-
-See [`demo/`](demo/) for desktop fakes and the complete native iOS surface.
+Use real production ad unit IDs; the toolkit selects Google's sample IDs for
+debug and simulator builds. Use `AdmobState::can_request_ads` for ad readiness
+and verified `Entitlements` for ownership. Neither is a gameplay readiness gate.
+The `game` module docs describe the launch sequence.
 
 ## iOS integration
 
-The Swift shims ship as a Swift package **in this same repo**, co-versioned with
-the crate — one git tag pins both halves, which keeps the `@_cdecl` ↔ `extern "C"`
-contract in lockstep. You link only the products for the features you ship; there
-are no files to vendor or keep in sync by hand.
+The Swift shims ship as a Swift package in this repository. One Git tag pins
+both halves, so pin the Rust crate and the package to the same revision.
 
 1. Add this crate with the features you ship.
-2. Add this repo as a Swift package dependency and link the matching products.
-   For SDK 27 builds, enable `platform`, link `Platform`, and copy the
-   `UIApplicationSceneManifest` from `demo/ios/project.yml` into your app's
-   Info.plist configuration. It names `BevyIosToolkitSceneDelegate`; without
-   scene adoption UIKit refuses to launch. `IosPlugin` registers it before run.
-   Each product links its own system frameworks; `Ads` brings the Google Mobile
-   Ads + UMP SDKs and the `Att` product transitively. The symbol prefixes (`store_`, `platform_`, `admob_`,
-   `att_`, `gamekit_`, `review_`, `notifications_`) won't collide with your own
-   bridge.
+2. Add this repository as a Swift package dependency and link the matching
+   products. Each product links its own system frameworks; `Ads` brings the
+   Google Mobile Ads and UMP SDKs and the `Att` product. `Package.swift` owns
+   the exact SDK versions: don't redeclare or override them.
 
    | cargo feature | SPM product |
    |---------------|-------------|
@@ -135,240 +85,86 @@ are no files to vendor or keep in sync by hand.
    | `review` | `Review` |
    | `notifications` | `Notifications` |
 
-3. Per-feature native setup (stays in your app — the package ships none of it):
-   - **ads** — set `GADApplicationIdentifier` in `Info.plist` (use `TEST_APP_ID`
-     in dev), add `NSUserTrackingUsageDescription` and Google's
-     `SKAdNetworkItems`, and provide a visible
-     action that sends `PresentPrivacyOptions` whenever the
-     `PrivacyOptionsRequirement` resource is `Required`
-     (`requirement.is_required()`).
-   - **att** — add `NSUserTrackingUsageDescription` to `Info.plist`.
-   - **gamekit** — enable the Game Center capability.
-   - **storekit** — define products in App Store Connect (or a StoreKit config).
-   - **notifications** — nothing. No `Info.plist` key, no entitlement, no
-     capability: these are local notifications, not push. NotificationsPlugin
-     registers the native delegate during app construction, before the app loop.
-4. The `demo/ios/` XcodeGen project shows the whole wiring end to end — it
-   consumes the package by relative path.
-
-With `platform`, call `platform::screen_size()` on the main thread before
-building `WindowPlugin` to size its initial window in **points**. After launch,
-it returns the key window's bounds, including resized iPad windows.
-Use `platform::scene::set_minimum_window_size(width, height)` before running an
-app whose controls need a minimum window size. Dimensions are logical points;
-the toolkit applies the limit when UIKit connects its window scene, including
-calls made before that scene exists. Devices without size restrictions ignore it.
-
-On iOS, send `RequestAppStoreEnvironment` when ready for a possible Apple Account
-sign-in sheet. Reading `AppStoreEnvironment` leaves it `Pending` until requested;
-`StoreConfig` still starts product and entitlement loading independently.
-The Swift bridge logs its terminal value once. The resource is not inserted on
-non-iOS targets; they do not need an App Store classification. Apple reports
-TestFlight as `Sandbox`, but sandbox is not a reliable distinction between
-TestFlight and every development install. Use `AppEnvironment::current()` for runtime services and
-`AdmobConfig::for_build()` for ad units: only debug or simulator builds use
-development settings; device releases, including TestFlight, use production.
-Keep build-time values such as
-`GADApplicationIdentifier` in the app target configuration.
-
-`StoreProducts::get(id).display_price` is StoreKit's localized
-`Product.displayPrice`; never replace it with a hard-coded production price.
-`Entitlements` begins in `Checking` and publishes `EntitlementsChanged` for its
-first verified snapshot even when the result is empty. Keep purchases and ad
-placements closed until `EntitlementsState::Ready`; `Failed` retains the last
-verified ownership set but is not permission to infer that an absent id is
-unowned. Consumables do not appear in `Entitlements`. Do not persist or migrate
-ownership in a game save. The toolkit
-reconciles at launch, foreground activation, purchase, restore, and verified
-transaction updates.
-
-`StoreActivity` reports whether a purchase or explicit restore is in flight.
-Use it to disable duplicate actions and keep progress visible until
-`PurchaseCompleted` or `RestoreCompleted` arrives. Ownership never comes from
-the operation result: always read `Entitlements`, including during launch-time
-reconciliation when no user-facing success message should be inferred.
-
-Send `ReloadStoreRequest` from a retry action to refresh the configured catalogue
-and entitlements. It does not call `AppStore.sync()` or ask for account login.
-The catalogue returns to `Loading`, stale prices are cleared, and overlapping
-native loads are coalesced. Explicit restoration still uses `RestoreRequest`.
-
-`platform::audio::is_other_audio_playing()` lets a game choose its launch-time
-music policy before calling `audio::configure`. Audio-session ownership and
-foreground restoration remain in the toolkit.
-
-### Ads verify consent at startup
-
-Inserting `AdmobConfig` requests ATT at the first active window if undetermined.
-The native bridge coalesces requests and retries interruptions. Existing allow,
-deny or restricted decisions skip the prompt; all three permit UMP to proceed.
-UMP verifies its saved choice on every launch and asks only if required.
-Approval and rejection both count as answered; games need no consent trigger
-or retry loop. Failed verification gets three asynchronous retries at 15, 30
-and 60 seconds. Valid cached UMP permission survives a refresh failure.
-The Mobile Ads SDK starts only after ATT resolves and UMP permits ad requests.
-Early ad commands emit failures; retry after `AdmobState::can_request_ads` is true.
-`RequestConsent` remains an explicit retry and joins any pending startup request.
-Link only the Swift `Ads` product; `Package.swift` owns the exact AdMob and UMP
-versions. Consumers must not redeclare or override those SDK dependencies.
-
-For a custom explanation before ATT, set `AdmobConfig::tracking_prompt` to
-`AdTrackingPrompt::Manual`, then send `RequestTracking`. Manual mode does not
-bypass either gate. To capture without prompts or ads, omit `AdmobConfig`.
-Add `BannerPlugin` and set `BannerIntent::visible` from screen and ownership
-eligibility. It coalesces asynchronous requests, cancels them for backgrounding
-or ineligible placements, adapts to width changes, and retries failures with
-30–120 second backoff. A banner has zero height until a creative arrives and
-after no-fill. Games reserve only `AdmobState::banner_height`.
-
-Preload full-screen formats with `LoadAd`, then send `TryShowAd` once at a
-natural break. Missing inventory is skipped immediately and never queued for
-later presentation. Keep game-specific placement and frequency caps in the game.
-An ATT-only app still requests permission explicitly. With ads enabled, games
-need no Swift prompt loop and no separate `Att` product linkage. Keep the Rust
-and Swift dependencies at matching 0.8 versions when migrating from 0.6 or 0.7.
-
-### Notifications are local, and for a real event
-
-There is no remote push here: no APNs, no device token, no server, and nothing
-that counts as data collection on a privacy manifest.
-
-Ids are yours and **replace** rather than stack — a timer that slips must never
-leave two notifications queued, which also makes rescheduling idempotent.
-`PendingNotifications` records what this app has asked for *since it launched*;
-it is not the system's queue, so when the two could disagree, believe the system.
-
-Opens are captured by a `UNUserNotificationCenterDelegate` installed during
-plugin construction, before winit enters UIApplicationMain. Early responses are
-buffered and drained on the first update. App shells need no native bootstrap.
-The initial permission is `Checking`; OS settings resolve it to NotDetermined,
-Denied, Authorized or Provisional. Request failures produce a separate message
-and never fabricate a denial.
-
-A notification API makes the daily-nag pattern very easy to build. Send one
-because something the player asked to know about actually happened — never to
-drag them back. Restraint is yours to enforce, which is what the desktop fake
-exists to let you test.
+3. Per-feature setup in your app (the package ships none of it):
+   - **platform**: for SDK 27 builds, copy the `UIApplicationSceneManifest`
+     from `demo/ios/project.yml` into your Info.plist. Without scene adoption
+     UIKit refuses to launch.
+   - **ads**: set `GADApplicationIdentifier` (use `TEST_APP_ID` in
+     development), `NSUserTrackingUsageDescription` and Google's
+     `SKAdNetworkItems` in Info.plist, and provide an action that sends
+     `PresentPrivacyOptions` while `PrivacyOptionsRequirement::is_required()`.
+   - **att**: add `NSUserTrackingUsageDescription`.
+   - **gamekit**: enable the Game Center capability.
+   - **storekit**: define products in App Store Connect.
+   - **notifications**: nothing. They are local, not push.
+4. `demo/ios/` is an XcodeGen project that shows the whole wiring end to end;
+   see [demo/ios/README.md](demo/ios/README.md).
 
 ## Shared game helpers
 
-These pieces are not part of a crates.io release. Games pin them by Git
-revision, the same revision as the toolkit itself.
-
-### Save files (`game_save`)
-
-`save/` is a standard-library-only crate with no Bevy dependency, for a
-headless engine crate:
+`save/` is `game_save`, a standard-library-only crate for atomic save files that
+never autosave over unreadable progress. It is not on crates.io; pin it to the
+same revision as the toolkit:
 
 ```toml
 [dependencies]
 game_save = { git = "https://github.com/marmikshah/bevy_ios_toolkit", rev = "…" }
 ```
 
-`SaveFile::load(decode, encode)` reads the save through the game's codec,
-creates a missing file, and resets one the codec rejects. A read failure
-blocks writes from the file and every clone until an explicit load succeeds,
-so default state never autosaves over unreadable progress. Writes are atomic
-(`<save>.tmp`, sync, rename) and store exactly the bytes given.
-`SaveFile::keep_rejected()` copies a rejected file to `<save>.invalid` before
-the reset; it is off by default.
+The toolkit itself also carries helpers games share: `ads::UmpQa` (UMP test
+geographies from launch variables), `environment::dev_var` / `dev_flag`
+(development-only switches), `platform::SafeArea`, `platform::initial_resolution`,
+`BootShieldPlugin` and the desktop `capture` module.
 
-### UMP QA launches (`ads`)
+## Layout
 
-`UmpQa::from_env("MYGAME_")` reads `MYGAME_UMP_QA` (`eea`, `us` or `other`;
-`1` and `true` mean `eea`) and `MYGAME_UMP_TEST_DEVICE_ID` in debug and
-simulator builds only. A valid value resets consent at startup and selects that
-UMP test geography. Unknown values are logged and ignored, and the device id is
-ignored unless a geography is selected. Insert `qa.test` as the `UmpTestConfig`
-resource and call `qa.apply(&mut admob_config)` for the device id. Release
-device builds read no variables.
+| path | what it is |
+|------|------------|
+| `src/` | the crate. `lib.rs` wires `IosPlugin` and the per-feature modules; each module has an iOS backend (`extern "C"`) and, where useful, a desktop fake |
+| `Sources/` | the Swift package: one target of `@_cdecl` shims per SPM product |
+| `save/` | the `game_save` crate (workspace member, not published) |
+| `examples/ads.rs` | desktop walkthrough of the ads fake |
+| `demo/` | a button-per-feature app (its own crate and lockfile); `demo/ios/` is its Xcode shell |
+| `tests/att/` | Swift tests for the ATT, UMP and prompt coordinators |
+| `tests/ios/` | UIKit scene smoke test and StoreKitTest scenarios |
+| `bin/` | `check.sh`, the portable checks CI runs |
 
-### Development switches (always available)
+A frame on iOS runs `IosSystems::Poll` (read native state), then
+`IosSystems::Intents` (game policy), then `IosSystems::Dispatch` (send commands).
+Native work never calls back into Rust.
 
-`environment::dev_var("MYGAME_WINDOW")` returns a variable only in debug and
-simulator builds (`AppEnvironment::current().is_development()`), and `None`
-when it is unset, empty or not Unicode. `environment::dev_flag("MYGAME_MUTE")`
-is true when that value is `1` or `true`, in any case and ignoring
-surrounding whitespace. Release device builds read no variables.
-
-### Safe-area resource (`platform`)
-
-Read `Res<SafeArea>` for the four insets and window size in points instead of
-calling `safe_area::insets()` from each system; every direct call queues
-main-thread refreshes on iOS. `PlatformPlugin` refreshes the resource in
-`PreUpdate`: at startup and after window creation, resize, focus or resume it
-reads every 250 ms for up to 12 reads, then every two seconds. It changes only
-when a value does.
-Off iOS the insets are zero. Systems in `PreUpdate` that read it can run
-`.after(safe_area::RefreshSafeArea)`.
-
-Desktop and capture apps that do not install `PlatformPlugin` can add
-`SafeAreaPlugin` alone; adding both, in either order, is harmless. Insert
-`safe_area::SafeAreaEmulation(insets)` to lay a desktop build out as if the
-device had those insets: it replaces the native insets on every platform while
-present, and takes effect on the next `PreUpdate`. `Insets::parse("59,34")`
-reads `top,bottom,left,right` from a launch argument or variable.
-
-### Initial window size (`platform`)
-
-`platform::initial_resolution((390, 844))` sizes the primary window from
-`screen_size()` in points when UIKit has measured it, and otherwise returns
-the fallback, which is what desktop builds get. Fractional points are
-truncated.
-
-### Boot shield plugin (`boot-shield`)
-
-`platform::boot_shield::show` covers the uninitialized drawable at launch.
-The opt-in `boot-shield` feature adds `BootShieldPlugin`, which lowers it only
-after real presents. On iOS its render-world systems paint each drawable with
-`ClearColor` for the first 8 frames and while pipelines compile, then dismiss
-the shield after 2 window presents with every pipeline ready, or after 12.
-`BootShieldReady::is_ready()` reports the dismissal to the main world, for a
-splash clock; it is ready immediately off iOS. Keep calling `show` before
-building the app, or `show_color(color)` with the same Bevy `Color` as the
-`ClearColor`. The feature enables Bevy's renderer. Off iOS, with only the
-`platform` feature, `BootShieldPlugin` and `BootShieldReady` exist as a stand-in
-that is ready at once, so desktop builds keep the same plugin list.
-
-### Offscreen capture (`capture`, desktop)
-
-`capture::headless(DefaultPlugins.build())` compiles pipelines synchronously
-and removes `WinitPlugin` and pipelined rendering, so a capture never opens a
-window and reads back on the frame it advanced. `capture::target_image(w, h)`
-allocates an sRGB RGBA8 target in physical pixels, and
-`capture::image_target(handle, scale)` points a camera at it with the game's
-own scale factor; `capture::attach_image_target(&mut camera, &mut images, w,
-h, scale)` does both and returns the image. `capture::window_resolution(w, h,
-scale)` gives the logical window the same density: `w` x `h` pixels, laid out
-in `w / scale` by `h / scale` points. `capture::fixed_clock(&mut app, fps)`
-advances time by exactly one frame per update, raises `Time<Virtual>`'s
-maximum delta to match, and adds a `ScheduleRunnerPlugin` loop at that period
-unless the app already has a runner. `parse_size("1320x2868")` (also `X`, and
-spaces around the numbers) and `parse_non_negative` parse capture arguments.
-The feature enables Bevy's renderer and winit (with X11 for
-Linux builds); the module exists on macOS, Windows and Linux only.
-
-## Testing
+## Develop
 
 ```bash
-bin/check.sh # formatting, strict linting, and tests; --help for scope
-cargo test -p game_save # the std-only save crate alone
-tests/att/run.sh # native prompt ownership, ATT and UMP coordination
-cargo run --example ads   --features ads
-cargo check --target aarch64-apple-ios --features storekit
-tests/ios/run.sh BOOTED_SIMULATOR_UDID # UIKit checks; run on iOS 26.x and 27
-tests/ios/storekit.sh BOOTED_SIMULATOR_UDID # native Store bridge + StoreKitTest
+bin/check.sh                       # fmt, clippy -D warnings, tests: library and demo
+bin/check.sh --help                # narrower scopes
+cargo run --example ads --features ads
+cargo run --manifest-path demo/Cargo.toml   # desktop demo with fakes
+cargo clippy --target aarch64-apple-ios --features all,game,boot-shield --all-targets
 ```
 
-The applicable fakes are env-tunable (force no-fill, show-failures, consent
-prompts, privacy-options requirements, ATT outcomes, Game Center sign-out) —
-each module documents its knobs. StoreKit has no desktop fake. An explicit
-`UmpTestConfig` makes geography testing
-deterministic only while `AdmobConfig::use_test_ads` is enabled; production
-configurations ignore its geography and reset fields. Simulators are test
-devices automatically. For a physical device, include UMP's logged hashed test
-device id in `AdmobConfig::test_device_ids`. On-device behaviour must still be
-validated in Xcode with the SDKs linked.
+CI runs `bin/check.sh` plus the native jobs in `.github/workflows/ci.yml` when a
+pull request is marked ready. CI builds only `--all-features`, so after touching
+`cfg` gates also run clippy with the single features you changed, and the iOS
+target above.
+
+Native checks need Xcode on a Mac:
+
+```bash
+tests/att/run.sh                                 # ATT, UMP and prompt coordination
+tests/ios/run.sh BOOTED_SIMULATOR_UDID           # UIKit checks; run on iOS 26.x and 27
+tests/ios/storekit.sh BOOTED_SIMULATOR_UDID      # Store bridge against StoreKitTest
+```
+
+The desktop fakes are tuned through environment variables; each module lists
+its own. StoreKit has no desktop fake. On-device behaviour still needs a device
+with the SDKs linked.
+
+## Releases
+
+Pushing a `v*` tag from `master` runs `.github/workflows/release.yml`, which
+checks the tag against `Cargo.toml` and publishes to crates.io. Swift consumers
+pick up the same tag through SPM. Record changes in [CHANGELOG.md](CHANGELOG.md).
 
 ## Compatibility
 
