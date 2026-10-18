@@ -1,10 +1,8 @@
 //! Native StoreKit transport and ECS polling.
+use super::environment::{environment_from_raw, take_environment_request};
+use super::operation::{begin_catalog_reload, finish_activity, start_purchase, start_restore};
+use super::state::decode_entitlement_snapshot;
 use super::*;
-use crate::store_environment::{environment_from_raw, take_environment_request};
-use crate::store_operation::{
-    begin_catalog_reload, finish_activity, start_purchase, start_restore,
-};
-use crate::store_state::decode_entitlement_snapshot;
 use std::ffi::{CStr, CString, c_char};
 #[path = "backend_ios.rs"]
 mod backend;
@@ -84,7 +82,7 @@ fn entitlements_rev() -> u64 {
     unsafe { backend::store_entitlements_rev() }
 }
 
-fn fetch_entitlements() -> Result<crate::store_state::EntitlementSnapshot, serde_json::Error> {
+fn fetch_entitlements() -> Result<super::state::EntitlementSnapshot, serde_json::Error> {
     let json = unsafe { take_string(backend::store_entitlements_json()) };
     decode_entitlement_snapshot(&json)
 }

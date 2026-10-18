@@ -15,12 +15,18 @@
 //!    [`Entitlements::owns`] then remains runtime truth across fresh purchases,
 //!    restores, foreground reconciliation, and already-owned relaunches.
 
-pub use crate::store_environment::{AppStoreEnvironment, RequestAppStoreEnvironment};
-pub use crate::store_operation::StoreActivity;
-pub use crate::store_state::{
-    Entitlements, EntitlementsState, ProductInfo, ProductsState, StoreProducts,
-};
+// Only the iOS-only `native` plugin drives these, so off iOS much is unused.
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+mod environment;
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+mod operation;
+#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
+mod state;
+
 use bevy::prelude::*;
+pub use environment::{AppStoreEnvironment, RequestAppStoreEnvironment};
+pub use operation::StoreActivity;
+pub use state::{Entitlements, EntitlementsState, ProductInfo, ProductsState, StoreProducts};
 
 #[cfg(target_os = "ios")]
 mod native;

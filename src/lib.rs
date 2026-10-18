@@ -73,21 +73,6 @@ pub(crate) fn configure_systems(app: &mut App) {
 #[cfg(feature = "game")]
 pub mod game;
 
-#[cfg(feature = "storekit")]
-#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
-#[path = "store/environment.rs"]
-mod store_environment;
-
-#[cfg(feature = "storekit")]
-#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
-#[path = "store/operation.rs"]
-mod store_operation;
-
-#[cfg(feature = "storekit")]
-#[path = "store/state.rs"]
-#[cfg_attr(not(target_os = "ios"), allow(dead_code))]
-mod store_state;
-
 #[cfg(any(
     feature = "ads",
     feature = "notifications",
