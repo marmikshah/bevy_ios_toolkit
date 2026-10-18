@@ -5,6 +5,12 @@ format loosely [Keep a Changelog](https://keepachangelog.com). Entries begin
 from the point this file was added — earlier releases live in the crates.io
 version history and the git log.
 
+## Unreleased
+
+### Removed
+- The `game_save` workspace crate (`save/`). It was never published; games
+  that used it keep their own copy.
+
 ## 0.9.1
 
 ### Fixed
