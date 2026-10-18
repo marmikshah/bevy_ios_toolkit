@@ -3,7 +3,7 @@
 The native wrapper that turns the `bevy_ios_toolkit_demo` Rust staticlib into a
 real iOS app, so each toolkit feature can be tried on a device or simulator.
 
-> **⚠️ Two one-time manual steps are required before the iOS app works** — see
+> **Two one-time manual steps are required before the iOS app works** — see
 > "Manual setup" below. The desktop demo omits StoreKit and needs neither.
 
 ## Manual setup (required)
@@ -45,8 +45,8 @@ Center *sign-in* works as-is; submitting to `lb.demo.highscore` /
   brew install xcodegen
   rustup target add aarch64-apple-ios aarch64-apple-ios-sim
   ```
-- The AdMob + UMP SDKs resolve automatically via Swift Package Manager on first
-  build (declared in `project.yml`).
+- The AdMob + UMP SDKs resolve automatically on first build, through the
+  toolkit's `Package.swift`.
 
 ## Run
 
@@ -90,12 +90,14 @@ activity and terminal result, plus the other toolkit integrations:
 - **Request Tracking (ATT)** — explicit request for manual timing. Ads request
   ATT automatically at launch by default. Set `BEVY_DEMO_MANUAL_ATT=1` to verify
   that ads remain blocked until this button resolves ATT.
-- **Haptic Tap** / **Ask for Review** — impact haptic / review prompt.
+- **Haptic Tap** / **Share Result** / **Ask for Review** — impact haptic / share
+  sheet / review prompt.
+- **Notify in 10s** — first tap asks for notification permission; once granted,
+  a tap schedules a local notification ten seconds out.
 - **Game Center** — first tap signs in; once signed in, a tap submits a score +
   achievement and opens the dashboard.
 
-For a real (non-test) build, swap the test ad ids for your own and turn off
-`AdmobConfig::use_test_ads`.
+For a real build, use `AdmobConfig::for_build()` with your own ad unit ids.
 
 ## Simulator regression checks
 

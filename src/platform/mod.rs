@@ -1,18 +1,16 @@
 //! Apple-platform integrations — thin wrappers over the `Platform` Swift shim
 //! (one `.swift` file per concern under `Sources/Platform/`), no-ops off iOS.
 //!
-//! Three groups:
-//!
-//! - **Input/display niceties** — stateless one-shots: impact/notification/
-//!   selection [`haptics`], the four-sided [`safe_area`] insets, opening
-//!   outbound [`links`], and the system [`share`] sheet.
-//! - **App lifecycle & session** ([`lifecycle`]) — tied to the running app:
-//!   the first-frame [`boot_shield`] and owning the [`audio`] session. Re-exported
-//!   flat here for convenience.
+//! - **Input/display** — impact/notification/selection [`haptics`], the
+//!   four-sided [`safe_area`] insets, the screen size ([`initial_resolution`],
+//!   [`screen_size`]), outbound [`links`], and the system [`share`] sheet.
+//! - **App lifecycle & session** ([`lifecycle`]) — the first-frame
+//!   [`boot_shield`], the [`audio`] session and [`scene`] setup.
 //! - **Device state** ([`power`]) — thermal pressure and Low Power Mode, polled
-//!   into a resource. With the [`SafeArea`] resource, the only parts of this
-//!   module that need [`PlatformPlugin`]; everything else is a plain function
-//!   you call directly.
+//!   into a resource.
+//!
+//! [`PlatformPlugin`] drives [`power`], [`SafeArea`] and scene registration;
+//! everything else is a plain function you call directly.
 //!
 //! ```no_run
 //! use bevy_ios_toolkit::platform::{haptics, safe_area, links, share, boot_shield, audio, Haptic};

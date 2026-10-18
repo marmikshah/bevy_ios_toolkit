@@ -26,9 +26,8 @@ serde_json = { version = "1", optional = true }
 tracing = { version = "0.1", default-features = false, features = ["std"], optional = true }
 
 [features]
-# No integration is on by default: each module's `extern "C"` block must only
-# exist when the matching Swift shim is added to the app's Xcode target, or iOS
-# linking fails on undefined symbols. Opt in to exactly what you ship.
+# No integration is on by default: a module's `extern "C"` block needs its SPM
+# product linked into the app, or iOS linking fails on undefined symbols.
 default = []
 storekit = ["dep:serde", "dep:serde_json"]
 ads = ["dep:serde", "dep:serde_json", "dep:tracing", "att", "bevy/bevy_window"]

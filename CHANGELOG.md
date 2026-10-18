@@ -5,11 +5,16 @@ format loosely [Keep a Changelog](https://keepachangelog.com). Entries begin
 from the point this file was added — earlier releases live in the crates.io
 version history and the git log.
 
-## Unreleased
-
-Shared game helpers, consumed by Git revision. The crate version is unchanged.
+## Unreleased (0.8.2)
 
 ### Added
+- A `game` feature with `game::IosGamePlugin(IosGameConfig)`: the default iOS
+  game startup (StoreKit, AdMob, ATT, UMP and notification permission
+  sequencing), with `IosSystems::{Poll, Intents, Dispatch}` ordering native
+  polling, game policy and dispatch. `IosGameConfig::capture` and
+  `capture_store` select capture profiles, ignored on production devices.
+- `NotificationPermissionFailed`, and a `NotificationPermission::Checking`
+  state until the first status is read.
 - `game_save`, a std-only workspace crate (`save/`) for atomic save files that
   refuse to autosave over unreadable progress. `SaveFile::keep_rejected` opts
   in to keeping a rejected save at `<save>.invalid`.
@@ -49,12 +54,27 @@ Shared game helpers, consumed by Git revision. The crate version is unchanged.
   `X` and whitespace around each number.
 
 ### Changed
+- `store::StorePlugin` exists only on iOS; store types stay portable for
+  policy tests.
 - `platform::links::open` opens URLs on Windows (`explorer`) and other Unix
   desktops (`xdg-open`) as well as macOS; it still no-ops elsewhere.
 - `platform` enables Bevy's `bevy_window` feature for the window messages that
   drive `SafeArea` refreshes.
 
-## 0.7.0 — Unreleased
+## 0.8.1 — 2026-10-04
+
+### Added
+- `ads::BannerPlugin` and `BannerIntent` for declarative banners, `TryShowAd`
+  for a skip-if-unavailable full-screen ad, and `AdmobConfig::for_build`.
+- `environment::AppEnvironment` (development, production, capture).
+- `ReloadStoreRequest` for a quiet catalogue/entitlement retry.
+- `audio::is_other_audio_playing` and `scene::set_minimum_window_size`.
+
+### Changed
+- The native bridge verifies UMP consent at startup and presents a required
+  form itself; games need no consent trigger.
+
+## 0.7.0 — 2026-09-17
 
 ### Changed
 - `ads` includes ATT and automatically requests permission when ad configuration

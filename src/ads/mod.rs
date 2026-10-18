@@ -1,17 +1,18 @@
 //! Google AdMob ads as Bevy resources + messages.
 //!
 //! Flow:
-//! 1. Insert [`AdmobConfig`] with your per-format ad unit ids (or
-//!    [`AdmobConfig::test_ads`] to use Google's official sample units). The
-//!    plugin automatically requests ATT and waits for a resolved decision.
-//!    The native bridge verifies UMP and presents any required form at startup,
-//!    respecting saved approval and rejection. Mobile Ads starts only when UMP
-//!    permits ads. `ads` includes the Rust `att` feature and Swift `Att` product.
+//! 1. Insert [`AdmobConfig`]: [`AdmobConfig::for_build`] with your per-format
+//!    ad unit ids serves test creatives in development and your units in
+//!    release. The plugin automatically requests ATT and waits for a resolved
+//!    decision. The native bridge verifies UMP and presents any required form
+//!    at startup, respecting saved approval and rejection. Mobile Ads starts
+//!    only when UMP permits ads. `ads` includes the Rust `att` feature and
+//!    Swift `Att` product.
 //! 2. Wait until [`AdmobState::can_request_ads`] is true; gameplay never waits.
 //! 3. Send [`LoadAd`] to preload a full-screen format; read [`AdInventory`] —
 //!    `is_loaded(format)` — to know when it's ready to present.
-//! 4. Send [`ShowAd`] to present it, or [`ShowBanner`] / [`HideBanner`] for the
-//!    banner.
+//! 4. Send [`TryShowAd`] at a natural break (or [`ShowAd`] to require it).
+//!    For banners, add [`BannerPlugin`] and set [`BannerIntent`].
 //! 5. React to [`AdLoaded`] / [`AdLoadFailed`] / [`AdShown`] / [`AdDismissed`] /
 //!    [`AdShowFailed`] / [`RewardEarned`] / [`AdClicked`].
 //!
@@ -304,7 +305,7 @@ pub struct AdmobConfig {
     /// creatives). The SDK logs the id of each device on first request.
     pub test_device_ids: Vec<String>,
     /// Force Google's official test unit ids for *every* format, ignoring
-    /// `unit_ids`. Keep this on in dev; turn it off for release builds.
+    /// `unit_ids`. [`AdmobConfig::for_build`] sets it per build.
     pub use_test_ads: bool,
 }
 

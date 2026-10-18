@@ -2,7 +2,7 @@
 //!
 //! A failed read disables writes for this file and every clone until a later
 //! explicit load succeeds. Returning defaults cannot authorize an autosave over
-//! unreadable progress. Invalid contents, including invalid UTF-8, are reset.
+//! unreadable progress. Contents the codec rejects are reset.
 //! [`SaveFile::keep_rejected`] opts in to setting the rejected file aside
 //! first (at [`rejected_path`]), so a codec or content change that rejects
 //! real progress never destroys it.

@@ -1,9 +1,7 @@
 // Review-prompt bridge for bevy_ios_toolkit (feature "review").
 //
-// @_cdecl C-ABI called FROM Rust; fire-and-forget. Add this file to the app's
-// Xcode target when the `review` feature is enabled. iOS decides whether to
-// actually present the prompt (heavily rate-limited). Deployment floor iOS 26 —
-// `AppStore.requestReview(in:)` (iOS 16+) needs no availability guard.
+// Fire-and-forget; link the `Review` product. iOS decides whether to present
+// the prompt (heavily rate-limited).
 
 import Foundation
 

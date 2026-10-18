@@ -1,10 +1,10 @@
 //! Desktop walkthrough of the ad flow against the built-in fake backend.
 //!
 //! ```text
-//! cargo run --example ads
-//! BEVY_ADMOB_FAKE_NO_FILL=interstitial cargo run --example ads   # interstitial won't fill
-//! BEVY_ADMOB_FAKE_REWARD_AMOUNT=50 cargo run --example ads        # bigger reward
-//! BEVY_ADMOB_FAKE_CONSENT=required cargo run --example ads        # consent form path
+//! cargo run --example ads --features ads
+//! BEVY_ADMOB_FAKE_NO_FILL=interstitial cargo run --example ads --features ads   # interstitial won't fill
+//! BEVY_ADMOB_FAKE_REWARD_AMOUNT=50 cargo run --example ads --features ads        # bigger reward
+//! BEVY_ADMOB_FAKE_CONSENT=required cargo run --example ads --features ads        # consent form path
 //! ```
 //!
 //! It shows a banner, preloads + shows an interstitial and a rewarded ad,

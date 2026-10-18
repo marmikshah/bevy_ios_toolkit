@@ -13,8 +13,7 @@ use std::ffi::c_char;
 
 unsafe extern "C" {
     /// Install the `UNUserNotificationCenterDelegate` that buffers opens.
-    /// Idempotent. See the module docs for why an app that wants to catch a
-    /// cold launch calls this from its own app delegate instead.
+    /// Idempotent; `NotificationsPlugin::build` calls it.
     pub fn notifications_install_delegate();
 
     /// Ask for permission. Asynchronous; the resolved status surfaces through
