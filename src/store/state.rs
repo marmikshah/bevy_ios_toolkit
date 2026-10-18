@@ -9,6 +9,7 @@ pub struct ProductInfo {
     pub id: String,
     pub display_name: String,
     /// Localized, currency-formatted price returned by `Product.displayPrice`.
+    /// Show this; never a hard-coded price.
     pub display_price: String,
     pub description: String,
 }

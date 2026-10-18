@@ -1,6 +1,20 @@
 //! Default iOS game services: quiet StoreKit loading and serialized launch
 //! permissions, independent of gameplay readiness. Games own placements and
 //! reminder content; SDK policy stays in the toolkit.
+//!
+//! Compose `IosGamePlugin(IosGameConfig::new(product_ids, ads))` before running
+//! Bevy, and link the Swift package's Platform, Store, Ads and Notifications
+//! products. The profile loads the catalogue and verified entitlements quietly.
+//! At launch it resolves ATT, refreshes UMP consent and presents only a
+//! required form, then requests notification permission only once OS settings
+//! report an unanswered choice. Pending SDK work never gates input, simulation
+//! or rendering. Put policy systems in [`IosSystems::Intents`] when they read
+//! this frame's native snapshot before dispatch.
+//!
+//! Debug and simulator builds use development services; physical release
+//! builds, including TestFlight, use production. The [`IosGameConfig::capture`]
+//! and [`IosGameConfig::capture_store`] profiles are ignored on production
+//! devices.
 
 use crate::{
     IosPlugin, IosSystems,
