@@ -1568,7 +1568,7 @@ mod tests {
     }
 }
 
-#[cfg(all(test, not(target_os = "ios")))]
+#[cfg(all(test, feature = "game", not(target_os = "ios")))]
 pub(crate) fn reset_test_backend() {
     backend::reset();
 }

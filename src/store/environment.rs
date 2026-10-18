@@ -31,7 +31,7 @@ pub(crate) fn take_environment_request(
 /// install-source detector. This resource describes purchases only. Select
 /// application services through [`AppEnvironment`](crate::environment::AppEnvironment),
 /// which keeps release device builds, including TestFlight, in production.
-/// [`StorePlugin`](crate::store::StorePlugin) inserts this resource only on iOS.
+/// The iOS-only `StorePlugin` inserts this resource.
 ///
 /// <https://developer.apple.com/documentation/storekit/apptransaction/environment>
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
