@@ -102,16 +102,7 @@ both halves, so pin the Rust crate and the package to the same revision.
 
 ## Shared game helpers
 
-`save/` is `game_save`, a standard-library-only crate for atomic save files that
-never autosave over unreadable progress. It is not on crates.io; pin it to the
-same revision as the toolkit:
-
-```toml
-[dependencies]
-game_save = { git = "https://github.com/marmikshah/bevy_ios_toolkit", rev = "…" }
-```
-
-The toolkit itself also carries helpers games share: `ads::UmpQa` (UMP test
+The toolkit carries helpers games share: `ads::UmpQa` (UMP test
 geographies from launch variables), `environment::dev_var` / `dev_flag`
 (development-only switches), `platform::SafeArea`, `platform::initial_resolution`,
 `BootShieldPlugin` and the desktop `capture` module.
@@ -122,7 +113,6 @@ geographies from launch variables), `environment::dev_var` / `dev_flag`
 |------|------------|
 | `src/` | the crate. `lib.rs` wires `IosPlugin` and the per-feature modules; each module has an iOS backend (`extern "C"`) and, where useful, a desktop fake |
 | `Sources/` | the Swift package: one target of `@_cdecl` shims per SPM product |
-| `save/` | the `game_save` crate (workspace member, not published) |
 | `examples/ads.rs` | desktop walkthrough of the ads fake |
 | `demo/` | a button-per-feature app (its own crate and lockfile); `demo/ios/` is its Xcode shell |
 | `tests/att/` | Swift tests for the ATT, UMP and prompt coordinators |

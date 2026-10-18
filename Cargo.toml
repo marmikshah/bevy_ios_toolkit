@@ -12,9 +12,7 @@ include = ["src/**", "examples/**", "README.md", "CHANGELOG.md", "LICENSE"]
 
 [workspace]
 # The root package is a member implicitly; listing "." would also claim the
-# excluded demo. `save/` is the std-only `game_save` crate, consumed by Git
-# revision. The demo keeps its own manifest and lockfile.
-members = ["save"]
+# excluded demo. The demo keeps its own manifest and lockfile.
 exclude = ["demo"]
 
 [dependencies]
