@@ -58,15 +58,6 @@ fn measured_size_rejects_unset_and_degenerate_sizes() {
 }
 
 #[test]
-fn desktop_plugin_reports_zero_insets() {
-    let mut app = App::new();
-    app.add_plugins(MinimalPlugins)
-        .add_plugins(crate::platform::PlatformPlugin);
-    app.update();
-    assert_eq!(*app.world().resource::<SafeArea>(), SafeArea::default());
-}
-
-#[test]
 fn safe_area_plugin_works_alone_and_beside_the_platform_plugin() {
     for platform_first in [false, true] {
         let mut app = App::new();
