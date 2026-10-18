@@ -5,6 +5,13 @@ format loosely [Keep a Changelog](https://keepachangelog.com). Entries begin
 from the point this file was added — earlier releases live in the crates.io
 version history and the git log.
 
+## 0.9.1
+
+### Fixed
+- Docs build with any feature set, not only `--all-features`: the crate page's
+  feature table and the boot-shield page no longer link to items a disabled
+  feature compiles out.
+
 ## 0.9.0
 
 ### Removed (breaking)
