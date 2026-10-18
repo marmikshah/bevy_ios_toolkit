@@ -117,7 +117,7 @@ pub struct SafeArea {
 
 /// Where [`refresh`] reads from: the native bridge, or a test double.
 #[derive(Resource, Clone, Copy)]
-pub(crate) struct SafeAreaSource(pub(crate) fn() -> SafeArea);
+struct SafeAreaSource(fn() -> SafeArea);
 
 impl Default for SafeAreaSource {
     fn default() -> Self {
@@ -136,7 +136,7 @@ const RETRIES: u8 = 12;
 /// update can precede the key UIWindow), then slowly for UIKit-only inset
 /// changes that produce no Bevy window event.
 #[derive(Resource, Debug)]
-pub(crate) struct SafeAreaPolling {
+struct SafeAreaPolling {
     next_poll: Duration,
     remaining: u8,
 }
@@ -179,7 +179,7 @@ impl SafeAreaPolling {
 }
 
 #[derive(SystemParam)]
-pub(crate) struct RefreshEvents<'w, 's> {
+struct RefreshEvents<'w, 's> {
     created: MessageReader<'w, 's, WindowCreated>,
     resized: MessageReader<'w, 's, WindowResized>,
     focused: MessageReader<'w, 's, WindowFocused>,
