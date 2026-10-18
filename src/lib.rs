@@ -5,7 +5,8 @@
 //!
 //! | feature | module | what it bridges |
 //! |---------|--------|-----------------|
-//! | `storekit` | [`store`] | StoreKit environment + in-app purchases (iOS only) |
+//! | `game` | [`game`] | default iOS game startup: StoreKit, AdMob, permissions, notifications |
+//! | `storekit` | [`store`] | StoreKit environment + in-app purchases |
 //! | `ads` | [`ads`] | Google AdMob ads + UMP consent |
 //! | `att` | [`att`] | App Tracking Transparency prompt |
 //! | `gamekit` | [`gamekit`] | Game Center auth, leaderboards, achievements |
@@ -16,15 +17,12 @@
 //! | `capture` | `capture` | desktop offscreen rendering for screenshots and recordings |
 //!
 //! No feature is on by default. Enable exactly what you ship — a module's
-//! `extern "C"` block only exists when its feature is on, and the matching Swift
-//! shim must be in your Xcode target or iOS linking fails on undefined symbols.
+//! `extern "C"` block only exists when its feature is on, and the matching SPM
+//! product must be linked into the app or iOS linking fails on undefined symbols.
 //!
 //! ```toml
 //! [dependencies]
 //! bevy_ios_toolkit = { version = "0.8", features = ["game"] }
-//!
-//! [target.'cfg(target_os = "ios")'.dependencies]
-//! bevy_ios_toolkit = { version = "0.8", features = ["storekit"] }
 //! ```
 //!
 //! # The native contract

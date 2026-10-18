@@ -1,9 +1,7 @@
 // App Tracking Transparency bridge for bevy_ios_toolkit (feature "att").
 //
-// Same contract as the other bridges: @_cdecl C-ABI called FROM Rust, polled
-// status (no callbacks into Rust). Add this file to the app's Xcode target when
-// the `att` feature is enabled. Requires `NSUserTrackingUsageDescription` in
-// Info.plist. Deployment floor iOS 26 — ATT (iOS 14+) needs no availability guard.
+// Link the `Att` product (the `Ads` product includes it). Requires
+// `NSUserTrackingUsageDescription` in Info.plist.
 
 import Foundation
 

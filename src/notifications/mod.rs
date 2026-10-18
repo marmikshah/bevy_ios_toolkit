@@ -47,12 +47,9 @@
 //! # Permission settles a frame or two after launch
 //!
 //! Asking iOS for the current authorization is asynchronous, so
-//! [`NotificationPermission`] reads `NotDetermined` for the first frames of a
-//! launch even when the answer has been on file for months. Scheduling is
-//! refused while it says so — deliberately, because a notification the system
-//! will never deliver is worse than a refusal that says why. Gate on
-//! [`NotificationPermission::can_deliver`], as the example above does, and the
-//! question never comes up.
+//! [`NotificationPermission`] reads `Checking` until the first status lands,
+//! even when the answer has been on file for months. Gate on
+//! [`NotificationPermission::can_deliver`], as the example above does.
 //!
 //! # Ids are yours, and they replace
 //!
@@ -63,26 +60,9 @@
 //!
 //! # Catching a cold launch
 //!
-//! Opens are captured by a `UNUserNotificationCenterDelegate` this module
-//! installs on its first update. iOS delivers the response for a notification
-//! that *launched* the app very early — possibly before Bevy's first frame —
-//! and a response delivered with no delegate set is gone.
-//!
-//! If catching that matters, call the shim's installer from your own app
-//! delegate, before returning from `didFinishLaunchingWithOptions`:
-//!
-//! ```swift
-//! @_silgen_name("notifications_install_delegate")
-//! func notificationsInstallDelegate()
-//!
-//! func application(_: UIApplication, didFinishLaunchingWithOptions _: ...) -> Bool {
-//!     notificationsInstallDelegate()
-//!     return true
-//! }
-//! ```
-//!
-//! It is idempotent, and anything buffered before Bevy starts is drained on the
-//! first update.
+//! [`NotificationsPlugin`] installs the `UNUserNotificationCenterDelegate`
+//! while the app is built, before winit starts, so an open that *launched* the
+//! app is buffered and delivered on the first update.
 //!
 //! # This is for a real event
 //!
@@ -95,7 +75,7 @@
 //! # Desktop fake (non-iOS)
 //!
 //! Nothing is ever delivered off iOS; what is modelled is the policy around it.
-//! Starts `NotDetermined`; a request resolves it.
+//! Starts `Checking`; a request resolves it.
 //!
 //! | variable | effect |
 //! |---|---|
@@ -140,7 +120,7 @@ enum Event {
 /// Whether the app may show notifications.
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum NotificationPermission {
-    /// Nobody has been asked yet.
+    /// The current status has not been read yet.
     #[default]
     Checking,
     /// Settings confirm the player has not answered.
@@ -171,8 +151,8 @@ impl NotificationPermission {
         matches!(self, Self::Authorized | Self::Provisional)
     }
 
-    /// Whether the prompt can still be shown. Asking again once the answer is
-    /// in shows nothing — send the player to Settings instead.
+    /// Whether the player has answered. Asking again then shows nothing — send
+    /// the player to Settings instead.
     pub fn is_determined(self) -> bool {
         !matches!(self, Self::Checking | Self::NotDetermined)
     }

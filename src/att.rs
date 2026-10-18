@@ -103,7 +103,8 @@ impl TrackingStatus {
         matches!(self, TrackingStatus::Authorized)
     }
 
-    /// Whether the prompt can still be shown (only from `NotDetermined`).
+    /// Whether the user has answered or tracking is restricted; the prompt
+    /// shows only while this is false.
     pub fn is_determined(self) -> bool {
         !matches!(self, TrackingStatus::NotDetermined)
     }

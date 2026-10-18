@@ -1,12 +1,9 @@
 // Game Center (GameKit) bridge for bevy_ios_toolkit (feature "gamekit").
 //
-// Same contract as the other bridges: @_cdecl C-ABI called FROM Rust; the one
-// piece of polled state is the authentication result (it gates submission).
-// Score/achievement submission is fire-and-forget; failures are logged here.
-// Add this file to the app's Xcode target when the `gamekit` feature is enabled,
-// enable the Game Center capability, and create the leaderboards/achievements in
-// App Store Connect. Deployment floor iOS 26 — the modern GameKit API needs no
-// availability guards.
+// The one piece of polled state is the authentication result (it gates
+// submission). Score/achievement submission is fire-and-forget; failures are
+// logged here. Link the `GameCenter` product, enable the Game Center
+// capability, and create the leaderboards/achievements in App Store Connect.
 
 import Foundation
 import os

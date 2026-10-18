@@ -10,9 +10,9 @@
 use std::ffi::c_char;
 
 unsafe extern "C" {
-    /// Start the Mobile Ads SDK. `test_devices` is a comma-separated list of
-    /// test device ids; `use_test_ads` is a bool (0/1) the app may use to log
-    /// or branch. Also kicks off a UMP consent-info refresh.
+    /// Configure UMP and refresh consent info; the Mobile Ads SDK starts once
+    /// UMP permits ads. `test_devices` is a comma-separated list of test
+    /// device ids; `use_test_ads` is a bool (0/1).
     pub fn admob_init_with_ump_test(
         test_devices: *const c_char,
         use_test_ads: i32,
