@@ -22,7 +22,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! bevy_ios_toolkit = { version = "0.8", features = ["game"] }
+//! bevy_ios_toolkit = { version = "0.9", features = ["game"] }
 //! ```
 //!
 //! # The native contract

@@ -16,7 +16,7 @@ ECS resources and messages. One crate, one plugin, a **feature per integration**
 | `boot-shield` | `platform::boot_shield` | `BootShieldPlugin`: lower the launch shield after real presents |
 | `capture` | `capture` | desktop offscreen rendering for screenshots and recordings |
 
-> **Status: experimental (0.8, pre-v1).** APIs will move. Live behaviour
+> **Status: experimental (0.9, pre-v1).** APIs will move. Live behaviour
 > needs a real device, the relevant Apple/Google setup, and the matching Swift
 > shim linked from the companion SPM package — see "iOS integration".
 
@@ -32,7 +32,7 @@ feature you haven't wired natively fails at link time rather than at runtime.
 
 ```toml
 [dependencies]
-bevy_ios_toolkit = { version = "0.8", features = ["game"] }
+bevy_ios_toolkit = { version = "0.9", features = ["game"] }
 ```
 
 ## Quick start
@@ -170,7 +170,7 @@ pick up the same tag through SPM. Record changes in [CHANGELOG.md](CHANGELOG.md)
 
 | `bevy_ios_toolkit` | `bevy` | iOS | AdMob SDK |
 |--------------------|--------|-----|-----------|
-| 0.8                | 0.19   | 26.0+ | 12.14.0 (+ UMP 3.1.0), exact package pins |
+| 0.9                | 0.19   | 26.0+ | 12.14.0 (+ UMP 3.1.0), exact package pins |
 
 ## Before you rely on it
 
