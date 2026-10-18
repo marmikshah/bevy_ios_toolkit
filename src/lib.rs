@@ -5,16 +5,16 @@
 //!
 //! | feature | module | what it bridges |
 //! |---------|--------|-----------------|
-//! | `game` | [`game`] | default iOS game startup: StoreKit, AdMob, permissions, notifications |
-//! | `storekit` | [`store`] | StoreKit environment + in-app purchases |
-//! | `ads` | [`ads`] | Google AdMob ads + UMP consent |
-//! | `att` | [`att`] | App Tracking Transparency prompt |
-//! | `gamekit` | [`gamekit`] | Game Center auth, leaderboards, achievements |
-//! | `review` | [`review`] | StoreKit review prompt |
-//! | `notifications` | [`notifications`] | local user notifications |
-//! | `platform` | [`platform`] | haptics, safe-area insets, links, share sheet, thermal/low-power state, boot shield, audio session |
-//! | `boot-shield` | [`platform::boot_shield`] | `BootShieldPlugin`, lowering the boot shield after real presents |
-//! | `capture` | `capture` | desktop offscreen rendering for screenshots and recordings |
+//! | `game` | [`game`](game/index.html) | default iOS game startup: StoreKit, AdMob, permissions, notifications |
+//! | `storekit` | [`store`](store/index.html) | StoreKit environment + in-app purchases |
+//! | `ads` | [`ads`](ads/index.html) | Google AdMob ads + UMP consent |
+//! | `att` | [`att`](att/index.html) | App Tracking Transparency prompt |
+//! | `gamekit` | [`gamekit`](gamekit/index.html) | Game Center auth, leaderboards, achievements |
+//! | `review` | [`review`](review/index.html) | StoreKit review prompt |
+//! | `notifications` | [`notifications`](notifications/index.html) | local user notifications |
+//! | `platform` | [`platform`](platform/index.html) | haptics, safe-area insets, links, share sheet, thermal/low-power state, boot shield, audio session |
+//! | `boot-shield` | [`platform::boot_shield`](platform/lifecycle/boot_shield/index.html) | `BootShieldPlugin`, lowering the boot shield after real presents |
+//! | `capture` | [`capture`](capture/index.html) | desktop offscreen rendering for screenshots and recordings |
 //!
 //! No feature is on by default. Enable exactly what you ship — a module's
 //! `extern "C"` block only exists when its feature is on, and the matching SPM
@@ -37,7 +37,7 @@
 //!   staticlib links on any target.
 //!
 //! Off iOS, integrations keep a fake only where a real cross-platform flow
-//! benefits from one. StoreKit purchases are platform-owned: [`store`] exposes
+//! benefits from one. StoreKit purchases are platform-owned: [`store`](store/index.html) exposes
 //! portable policy types, and the native backend exists only on iOS.
 //!
 //! ```no_run
