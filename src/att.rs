@@ -19,7 +19,7 @@
 //! }
 //!
 //! fn react(status: Res<TrackingStatus>) {
-//!     if status.is_authorized() { /* request personalized ads */ }
+//!     if *status == TrackingStatus::Authorized { /* request personalized ads */ }
 //! }
 //! ```
 //!
@@ -97,10 +97,6 @@ impl TrackingStatus {
             3 => TrackingStatus::Authorized,
             _ => TrackingStatus::NotDetermined,
         }
-    }
-
-    pub fn is_authorized(self) -> bool {
-        matches!(self, TrackingStatus::Authorized)
     }
 
     /// Whether the user has answered or tracking is restricted; the prompt
@@ -205,7 +201,6 @@ mod tests {
             TrackingStatus::Denied
         );
         assert_eq!(test_support::requests(), 1);
-        assert!(TrackingStatus::Authorized.is_authorized());
         assert!(!TrackingStatus::NotDetermined.is_determined());
 
         unsafe { std::env::remove_var("BEVY_IOS_FAKE_ATT") };

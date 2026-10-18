@@ -115,15 +115,6 @@ pub struct SafeArea {
     pub size: Vec2,
 }
 
-impl SafeArea {
-    /// [`size`](Self::size) when it is a usable measurement (finite and over
-    /// one point on both axes).
-    pub fn measured_size(&self) -> Option<Vec2> {
-        let size = self.size;
-        (size.is_finite() && size.x > 1.0 && size.y > 1.0).then_some(size)
-    }
-}
-
 /// Where [`refresh`] reads from: the native bridge, or a test double.
 #[derive(Resource, Clone, Copy)]
 pub(crate) struct SafeAreaSource(pub(crate) fn() -> SafeArea);

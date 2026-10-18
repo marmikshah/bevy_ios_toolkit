@@ -46,18 +46,6 @@ fn repeated_events_do_not_bypass_the_retry_rate_limit() {
 }
 
 #[test]
-fn measured_size_rejects_unset_and_degenerate_sizes() {
-    let area = |size| SafeArea { size, ..default() };
-    assert_eq!(area(Vec2::ZERO).measured_size(), None);
-    assert_eq!(area(Vec2::new(1.0, 800.0)).measured_size(), None);
-    assert_eq!(area(Vec2::new(f32::NAN, 800.0)).measured_size(), None);
-    assert_eq!(
-        area(Vec2::new(390.0, 844.0)).measured_size(),
-        Some(Vec2::new(390.0, 844.0))
-    );
-}
-
-#[test]
 fn safe_area_plugin_works_alone_and_beside_the_platform_plugin() {
     for platform_first in [false, true] {
         let mut app = App::new();
@@ -203,8 +191,8 @@ fn resource_follows_window_events_and_writes_only_on_change() {
     advance(&mut app, RETRY_INTERVAL);
     assert_eq!(app.world().resource::<SafeArea>().insets.top, 59.0);
     assert_eq!(
-        app.world().resource::<SafeArea>().measured_size(),
-        Some(Vec2::new(390.0, 844.0))
+        app.world().resource::<SafeArea>().size,
+        Vec2::new(390.0, 844.0)
     );
 
     // Exhaust the settling burst; the next idle poll is seconds away.

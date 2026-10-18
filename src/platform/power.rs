@@ -11,7 +11,8 @@
 //!
 //! fn adapt(mut changes: MessageReader<PowerStateChanged>) {
 //!     for PowerStateChanged(power) in changes.read() {
-//!         if power.is_constrained() { /* drop to the low quality tier */ }
+//!         let hot = matches!(power.thermal, ThermalState::Serious | ThermalState::Critical);
+//!         if power.low_power_mode || hot { /* drop to the low quality tier */ }
 //!     }
 //! }
 //! ```
@@ -95,17 +96,6 @@ pub struct PowerState {
     pub low_power_mode: bool,
 }
 
-impl PowerState {
-    /// Whether the game should be on a reduced quality tier — the device is
-    /// throttling, or the user asked for longer battery life. The two are
-    /// separate signals but call for the same response, so most games branch
-    /// on this rather than on either field.
-    pub fn is_constrained(self) -> bool {
-        self.low_power_mode
-            || matches!(self.thermal, ThermalState::Serious | ThermalState::Critical)
-    }
-}
-
 /// Emitted when [`PowerState`] changes — the transition, not the level, so a
 /// game can retune once instead of diffing every frame.
 #[derive(Message, Clone, Copy, Debug)]
@@ -144,14 +134,12 @@ mod tests {
             app.world().resource::<PowerState>().thermal,
             ThermalState::Nominal
         );
-        assert!(!app.world().resource::<PowerState>().is_constrained());
 
         unsafe { std::env::set_var("BEVY_IOS_FAKE_THERMAL", "serious") };
         app.update();
 
         let power = *app.world().resource::<PowerState>();
         assert_eq!(power.thermal, ThermalState::Serious);
-        assert!(power.is_constrained());
 
         // The transition wrote exactly one message...
         let written: Vec<_> = app

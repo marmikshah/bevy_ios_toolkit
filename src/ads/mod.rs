@@ -102,15 +102,6 @@ pub enum AdFormat {
 }
 
 impl AdFormat {
-    /// Every format, for iteration (inventory init, diagnostics).
-    pub const ALL: [AdFormat; 5] = [
-        AdFormat::Banner,
-        AdFormat::Interstitial,
-        AdFormat::Rewarded,
-        AdFormat::RewardedInterstitial,
-        AdFormat::AppOpen,
-    ];
-
     /// True for the full-screen formats whose loaded creative is consumed by a
     /// single presentation (everything except the persistent banner).
     pub fn is_full_screen(self) -> bool {
