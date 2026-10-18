@@ -5,9 +5,6 @@
 use std::ffi::{CStr, c_char};
 
 /// Copy a backend-owned C string into an owned `String`. Null → empty.
-// Used by ads, notifications and the gamekit fake; unused in an iOS
-// gamekit-only build.
-#[allow(dead_code)]
 pub(crate) unsafe fn read_cstr(ptr: *const c_char) -> String {
     if ptr.is_null() {
         return String::new();

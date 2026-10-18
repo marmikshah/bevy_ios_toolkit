@@ -89,10 +89,9 @@ mod store_operation;
 mod store_state;
 
 #[cfg(any(
-    all(feature = "storekit", any(target_os = "ios", doc)),
     feature = "ads",
-    feature = "gamekit",
-    feature = "notifications"
+    feature = "notifications",
+    all(feature = "gamekit", not(target_os = "ios"))
 ))]
 mod ffi;
 
