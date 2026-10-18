@@ -298,7 +298,7 @@ calling `safe_area::insets()` from each system; every direct call queues
 main-thread refreshes on iOS. `PlatformPlugin` refreshes the resource in
 `PreUpdate`: at startup and after window creation, resize, focus or resume it
 reads every 250 ms for up to 12 reads, then every two seconds. It changes only
-when a value does. `SafeArea::measured_size()` rejects an unset window size.
+when a value does.
 Off iOS the insets are zero. Systems in `PreUpdate` that read it can run
 `.after(safe_area::RefreshSafeArea)`.
 

@@ -52,7 +52,13 @@ fn guarded() -> std::sync::MutexGuard<'static, ()> {
 
 #[test]
 fn format_i32_round_trips() {
-    for f in AdFormat::ALL {
+    for f in [
+        AdFormat::Banner,
+        AdFormat::Interstitial,
+        AdFormat::Rewarded,
+        AdFormat::RewardedInterstitial,
+        AdFormat::AppOpen,
+    ] {
         assert_eq!(AdFormat::from_i32(f.as_i32()), Some(f));
     }
     assert_eq!(AdFormat::from_i32(99), None);

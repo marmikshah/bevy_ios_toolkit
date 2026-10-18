@@ -57,12 +57,6 @@ impl AppStoreEnvironment {
     pub const fn is_resolved(self) -> bool {
         !matches!(self, Self::Pending)
     }
-
-    /// Whether StoreKit reported the production App Store purchase environment.
-    /// This does not select the application's development or production services.
-    pub const fn is_production(self) -> bool {
-        matches!(self, Self::Production)
-    }
 }
 
 impl fmt::Display for AppStoreEnvironment {
@@ -138,21 +132,6 @@ mod tests {
         assert_eq!(environment_from_raw(4), AppStoreEnvironment::Unavailable);
         assert_eq!(environment_from_raw(5), AppStoreEnvironment::Unknown);
         assert_eq!(environment_from_raw(i32::MAX), AppStoreEnvironment::Unknown);
-    }
-
-    #[test]
-    fn only_production_receipts_are_classified_as_production() {
-        assert!(AppStoreEnvironment::Production.is_production());
-
-        for environment in [
-            AppStoreEnvironment::Pending,
-            AppStoreEnvironment::Xcode,
-            AppStoreEnvironment::Sandbox,
-            AppStoreEnvironment::Unavailable,
-            AppStoreEnvironment::Unknown,
-        ] {
-            assert!(!environment.is_production(), "{environment}");
-        }
     }
 
     #[test]

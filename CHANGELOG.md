@@ -7,6 +7,11 @@ version history and the git log.
 
 ## Unreleased (0.8.2)
 
+### Removed (breaking)
+- Unused convenience API: `AdFormat::ALL`, `TrackingStatus::is_authorized`,
+  `PowerState::is_constrained`, `SafeArea::measured_size` and
+  `AppStoreEnvironment::is_production`. Compare the enum or fields directly.
+
 ### Added
 - A `game` feature with `game::IosGamePlugin(IosGameConfig)`: the default iOS
   game startup (StoreKit, AdMob, ATT, UMP and notification permission
