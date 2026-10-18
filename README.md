@@ -163,8 +163,10 @@ with the SDKs linked.
 ## Releases
 
 Pushing a `v*` tag from `master` runs `.github/workflows/release.yml`, which
-checks the tag against `Cargo.toml` and publishes to crates.io. Swift consumers
-pick up the same tag through SPM. Record changes in [CHANGELOG.md](CHANGELOG.md).
+checks the tag against `Cargo.toml`, publishes to crates.io and creates the
+GitHub Release from the version's `## X.Y.Z` section in
+[CHANGELOG.md](CHANGELOG.md); a tag without that section fails before
+publishing. Swift consumers pick up the same tag through SPM.
 
 ## Compatibility
 
