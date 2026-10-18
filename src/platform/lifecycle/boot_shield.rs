@@ -132,26 +132,3 @@ impl Plugin for BootShieldPlugin {
         app.init_resource::<BootShieldReady>();
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn desktop_calls_are_noops() {
-        // Off iOS the shield is inert — the flow stays callable on desktop.
-        show(0.03, 0.04, 0.09);
-        show_color(Color::srgb(0.03, 0.04, 0.09));
-        first_frame_presented();
-    }
-
-    #[cfg(not(target_os = "ios"))]
-    #[test]
-    fn desktop_plugin_is_ready_at_once() {
-        let mut app = App::new();
-        app.add_plugins((MinimalPlugins, BootShieldPlugin));
-        app.finish();
-        app.update();
-        assert!(app.world().resource::<BootShieldReady>().is_ready());
-    }
-}

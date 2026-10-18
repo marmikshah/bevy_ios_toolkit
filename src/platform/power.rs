@@ -132,7 +132,8 @@ mod tests {
 
     #[test]
     fn thermal_change_updates_resource_and_emits_once() {
-        // SAFETY: single-threaded test; only this test reads these two vars.
+        // SAFETY: only this test sets this var; other tests building
+        // PlatformPlugin read it, which std serialises, and ignore the result.
         unsafe { std::env::remove_var("BEVY_IOS_FAKE_THERMAL") };
 
         let mut app = App::new();
